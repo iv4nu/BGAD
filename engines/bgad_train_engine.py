@@ -177,9 +177,17 @@ import os
 
 # modificata, consente ogni 10 epoche di stampare andamento della loss, Auroc e Pro score 
 def train(args):
-    encoder = load_pretrained_b6().to(args.device).eval()
-
+    import timm
+    import torch
+    
+    # === Caricamento manuale dei pesi preaddestrati EfficientNet-B6 ===
+    checkpoint_path = "/kaggle/input/efficientnet-b6-weights/tf_efficientnet_b6_ns-51548356.pth"
+    encoder = timm.create_model("tf_efficientnet_b6_ns", features_only=True, 
+                out_indices=[i+1 for i in range(args.feature_levels)], pretrained=False)
+    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    encoder.load_state_dict(state_dict)
     encoder = encoder.to(args.device).eval()
+
     feat_dims = encoder.feature_info.channels()
 
     decoders = [load_flow_model(args, feat_dim) for feat_dim in feat_dims]
