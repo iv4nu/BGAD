@@ -177,8 +177,8 @@ import os
 
 # modificata, consente ogni 10 epoche di stampare andamento della loss, Auroc e Pro score 
 def train(args):
-    encoder = timm.create_model(args.backbone_arch, features_only=True, 
-                out_indices=[i+1 for i in range(args.feature_levels)], pretrained=True)
+    encoder = load_pretrained_b6().to(args.device).eval()
+
     encoder = encoder.to(args.device).eval()
     feat_dims = encoder.feature_info.channels()
 
