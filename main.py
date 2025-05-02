@@ -21,7 +21,7 @@ def main_single(args):
 
     # output settings
     args.save_results = True
-    
+    args.save_aupro = False
     # unsup-train lr settings
     setting_lr_parameters(args)
     
