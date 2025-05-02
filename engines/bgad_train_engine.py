@@ -151,10 +151,10 @@ def validate(args, epoch, data_loader, encoder, decoders):
     scores = convert_to_anomaly_scores(args, logps_list)
     # calculate detection AUROC
     img_scores = np.max(scores, axis=(1, 2))
-    gt_label = np.asarray(gt_label_list, dtype=np.bool)
+    gt_label = np.asarray(gt_label_list, dtype=bool)
     img_auc = roc_auc_score(gt_label, img_scores)
     # calculate segmentation AUROC
-    gt_mask = np.squeeze(np.asarray(gt_mask_list, dtype=np.bool), axis=1)
+    gt_mask = np.squeeze(np.asarray(gt_mask_list, dtype=bool), axis=1)
     pix_auc = roc_auc_score(gt_mask.flatten(), scores.flatten())
 
     pix_pro = -1
