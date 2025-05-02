@@ -91,7 +91,7 @@ def parse_args():
                         help='train or test phase (default: train)')
     parser.add_argument("--print_freq", default=2, type=int, metavar='T',
                         help='print frequency (default: 2)')                    
-    parser.add_argument('--pro', action='store_true', default=True,
+    parser.add_argument('--pro', action='store_true', default=False,
                         help='enables estimation of AUPRO metric')
     parser.add_argument('--vis', action='store_true', default=False,
                         help='test data visualizations')
