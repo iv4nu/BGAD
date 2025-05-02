@@ -106,7 +106,7 @@ def calculate_pro_metric(scores, gt_mask):
     pros_std = []
     threds = []
     fprs = []
-    binary_score_maps = np.zeros_like(scores, dtype=np.bool)
+    binary_score_maps = np.zeros_like(scores, dtype=bool)
     for step in range(max_step):
         thred = max_th - step * delta
         # segmentation
