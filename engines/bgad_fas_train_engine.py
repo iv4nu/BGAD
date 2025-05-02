@@ -178,6 +178,9 @@ def validate(args, epoch, data_loader, encoder, decoders):
     scores = convert_to_anomaly_scores(args, logps_list)
     # calculate detection AUROC
     img_scores = np.max(scores, axis=(1, 2))
+    #AGGIUNTO PER TEST CON UAD!!!!!!!
+    np.save(os.path.join(args.output_dir, args.exp_name, "img_scores.npy"), img_scores)
+
     gt_label = np.asarray(gt_label_list, dtype=bool)
     img_auc = roc_auc_score(gt_label, img_scores)
     # calculate segmentation AUROC
