@@ -40,7 +40,7 @@ def parse_args():
     parser.add_argument('--flow_arch', default='conditional_flow_model', type=str, metavar='A',
                         help='normalizing flow model (default: cnflow)')
     parser.add_argument('--feature_levels', default=3, type=int, metavar='L',
-                        help='nudmber of feature layers (default: 3)')
+                        help='number of feature layers (default: 3)')
     parser.add_argument('--coupling_layers', default=8, type=int, metavar='L',
                         help='number of coupling layers used in normalizing flow (default: 8)')
     parser.add_argument('--clamp_alpha', default=1.9, type=float, metavar='L',
@@ -91,7 +91,7 @@ def parse_args():
                         help='train or test phase (default: train)')
     parser.add_argument("--print_freq", default=2, type=int, metavar='T',
                         help='print frequency (default: 2)')                    
-    parser.add_argument('--pro', action='store_true', default=False,
+    parser.add_argument('--pro', action='store_true', default=True,
                         help='enables estimation of AUPRO metric')
     parser.add_argument('--vis', action='store_true', default=False,
                         help='test data visualizations')
