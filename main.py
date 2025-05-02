@@ -39,9 +39,6 @@ def main_single(args):
 def main():
     init_seeds(0)
     args = parse_args()
-    args.data_root = '/kaggle/input/mvtec-ad/mvtec_anomaly_detection'
-    args.class_name = 'bottle'
-
 
     # setting cuda 
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
