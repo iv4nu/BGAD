@@ -171,79 +171,42 @@ def validate(args, epoch, data_loader, encoder, decoders):
     return img_auc, pix_auc, pix_pro
 
 
-import json
-import os
-
-
-# modificata, consente ogni 10 epoche di stampare andamento della loss, Auroc e Pro score 
 def train(args):
-    import timm
-    import torch
-    
-    # === Caricamento manuale dei pesi preaddestrati EfficientNet-B6 ===
-    checkpoint_path = "/kaggle/input/efficientnet-b6-weights/tf_efficientnet_b6_ns-51548356.pth"
-    encoder = timm.create_model("tf_efficientnet_b6_ns", features_only=True, 
-                out_indices=[i+1 for i in range(args.feature_levels)], pretrained=False)
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
-    encoder.load_state_dict(state_dict)
+    # Feature Extractor
+    encoder = timm.create_model(args.backbone_arch, features_only=True, 
+                out_indices=[i+1 for i in range(args.feature_levels)], pretrained=True)
     encoder = encoder.to(args.device).eval()
-
     feat_dims = encoder.feature_info.channels()
-
+    
+    # Normalizing Flows
     decoders = [load_flow_model(args, feat_dim) for feat_dim in feat_dims]
     decoders = [decoder.to(args.device) for decoder in decoders]
     params = list(decoders[0].parameters())
     for l in range(1, args.feature_levels):
         params += list(decoders[l].parameters())
-
+    # optimizer
     optimizer = torch.optim.Adam(params, lr=args.lr)
+    # data loaders
     train_loader, test_loader = create_data_loader(args)
-
+    # stats
     img_auc_obs = MetricRecorder('IMG_AUROC')
     pix_auc_obs = MetricRecorder('PIX_AUROC')
     pix_pro_obs = MetricRecorder('PIX_AUPRO')
-
-    loss_curve = []
-    epoch_metrics = []
-
     for epoch in range(args.meta_epochs):
         if args.checkpoint:
             load_weights(encoder, decoders, args.checkpoint)
 
-        print(f'Train meta epoch: {epoch}')
+        print('Train meta epoch: {}'.format(epoch))
         train_meta_epoch(args, epoch, train_loader, encoder, decoders, optimizer)
 
-        # Ogni 10 epoche o ultima
-        if (epoch + 1) % 10 == 0 or epoch == args.meta_epochs - 1:
-            img_auc, pix_auc, pix_pro = validate(args, epoch, test_loader, encoder, decoders)
+        img_auc, pix_auc, pix_pro = validate(args, epoch, test_loader, encoder, decoders)
 
-            img_auc_obs.update(100.0 * img_auc, epoch)
-            pix_auc_obs.update(100.0 * pix_auc, epoch)
-            pix_pro_obs.update(100.0 * pix_pro, epoch)
-
-            epoch_metrics.append({
-                "epoch": epoch,
-                "image_auroc": round(100.0 * img_auc, 2),
-                "pixel_auroc": round(100.0 * pix_auc, 2),
-                "pro_score": round(100.0 * pix_pro, 2)
-            })
-
-            # Salvataggio log JSON incrementale
-            log_save_path = os.path.join("logs", f"{args.class_name}_log.json")
-            os.makedirs("logs", exist_ok=True)
-            json.dump({
-                "epoch_metrics": epoch_metrics,
-                "loss_curve": loss_curve,
-                "image_auroc": img_auc_obs.max_score,
-                "pixel_auroc": pix_auc_obs.max_score,
-                "pro_score": pix_pro_obs.max_score
-            }, open(log_save_path, "w"), indent=2)
-
-        # salva andamento loss anche se non validi
-        loss_curve.append(-1)
-
+        img_auc_obs.update(100.0 * img_auc, epoch)
+        pix_auc_obs.update(100.0 * pix_auc, epoch)
+        pix_pro_obs.update(100.0 * pix_pro, epoch)
+        
     if args.save_results:
         save_results(img_auc_obs, pix_auc_obs, pix_pro_obs, args.output_dir, args.exp_name, args.model_path, args.class_name)
-        save_weights(encoder, decoders, args.output_dir, args.exp_name, args.model_path)
+        save_weights(encoder, decoders, args.output_dir, args.exp_name, args.model_path)  # avoid unnecessary saves
 
     return img_auc_obs.max_score, pix_auc_obs.max_score, pix_pro_obs.max_score

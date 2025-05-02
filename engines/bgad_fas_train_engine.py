@@ -1,5 +1,4 @@
 import os
-#ciao
 import math
 import timm
 import torch
@@ -200,12 +199,8 @@ def validate(args, epoch, data_loader, encoder, decoders):
 
 def train(args):
     # Feature Extractor
-    # === Caricamento pesi preaddestrati da Kaggle ===
-    checkpoint_path = "/kaggle/input/efficientnet-b6-weights/tf_efficientnet_b6_ns-51548356.pth"
-    encoder = timm.create_model("tf_efficientnet_b6_ns", features_only=True, 
-                out_indices=[i+1 for i in range(args.feature_levels)], pretrained=False)
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
-    encoder.load_state_dict(state_dict)
+    encoder = timm.create_model(args.backbone_arch, features_only=True, 
+                out_indices=[i+1 for i in range(args.feature_levels)], pretrained=True)
     encoder = encoder.to(args.device).eval()
     feat_dims = encoder.feature_info.channels()
     
