@@ -231,22 +231,10 @@ def train(args):
         img_auc_obs.update(100.0 * img_auc, epoch)
         pix_auc_obs.update(100.0 * pix_auc, epoch)
         pix_pro_obs.update(100.0 * pix_pro, epoch)
-
-        results_log.append({
-            "epoch": epoch,
-            "img_auc": round(100.0 * img_auc, 2),
-            "pix_auc": round(100.0 * pix_auc, 2),
-            "pix_pro": round(100.0 * pix_pro, 2)
-    })
         
         
     if args.save_results:
         save_results(img_auc_obs, pix_auc_obs, pix_pro_obs, args.output_dir, args.exp_name, args.model_path, args.class_name)
         save_weights(encoder, decoders, args.output_dir, args.exp_name, args.model_path)  # avoid unnecessary saves
-        # Save full epoch-wise metrics
-        os.makedirs(os.path.join(args.output_dir, args.exp_name, 'results'), exist_ok=True)
-        with open(os.path.join(args.output_dir, args.exp_name, 'results', f'{args.class_name}_log.json'), 'w') as f:
-            json.dump(results_log, f, indent=2)
-
 
     return img_auc_obs.max_score, pix_auc_obs.max_score, pix_pro_obs.max_score
