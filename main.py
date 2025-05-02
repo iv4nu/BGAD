@@ -45,6 +45,7 @@ def main():
     args.device = torch.device("cuda")
 
     img_aucs, pix_aucs, pix_pros = [], [], []
+    args.class_name = 'bottle'
     if args.class_name == 'none':  # default training all classes
         if args.dataset == 'mvtec':
             CLASS_NAMES = MVTEC_CLASS_NAMES 
