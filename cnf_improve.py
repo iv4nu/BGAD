@@ -35,14 +35,15 @@ def main():
     args.margin_tau = 0.1
     args.pos_beta = 0.05
     args.flow_arch = 'conditional_flow_model'
-    
-    # Fix per errore crop_size
+
+    # Fix compatibilità dataset
     args.crop_size = args.inp_size
     args.img_size = args.inp_size
-
+    args.norm_mean = [0.485, 0.456, 0.406]
+    args.norm_std = [0.229, 0.224, 0.225]
 
     # Early stopping config
-    patience = 4
+    patience = 5
     best_score = -1
     best_epoch = 0
     stop_counter = 0
