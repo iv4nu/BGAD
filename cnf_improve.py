@@ -38,6 +38,8 @@ def main():
     
     # Fix per errore crop_size
     args.crop_size = args.inp_size
+    args.img_size = args.inp_size
+
 
     # Early stopping config
     patience = 4
