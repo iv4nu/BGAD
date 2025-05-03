@@ -4,7 +4,7 @@ import os
 import FrEIA.framework as Ff
 import FrEIA.modules as Fm
 from main import parse_args
-from engines.bgad_train_engine import train
+from engines.bgad_train_engine import train  # <-- Fix corretto qui
 from datasets import create_fas_data_loader
 
 def build_optimized_flow_model(input_dim, cond_dim, n_layers=4):
@@ -23,7 +23,7 @@ def build_optimized_flow_model(input_dim, cond_dim, n_layers=4):
             ),
             affine_clamping=1.9,
             global_affine_type='SOFTPLUS',
-            permute_soft=False
+            permute_soft=True
         )
     return flow
 
@@ -42,6 +42,9 @@ def main():
     args.norm_mean = [0.485, 0.456, 0.406]
     args.norm_std = [0.229, 0.224, 0.225]
 
+    # Device fix
+    args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
     # Early stopping config
     patience = 5
     best_score = -1
@@ -52,16 +55,16 @@ def main():
 
     # Override del decoder con modello ottimizzato
     decoder = build_optimized_flow_model(input_dim=2048, cond_dim=args.pos_embed_dim)
-    decoder = decoder.cuda()
+    decoder = decoder.to(args.device)
 
     encoder = torch.hub.load('rwightman/gen-efficientnet-pytorch', args.backbone_arch, pretrained=True)
-    encoder = encoder.cuda()
+    encoder = encoder.to(args.device)
 
     optimizer = torch.optim.Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr, weight_decay=1e-4)
 
     for epoch in range(args.meta_epochs):
         print(f"\n[Epoch {epoch}] Training...")
-        img_auc, pix_auc, _ = train(args)
+        img_auc, pix_auc, _ = train(args, epoch, [normal_loader, train_loader], encoder, [decoder], optimizer)
 
         if img_auc > best_score:
             best_score = img_auc
