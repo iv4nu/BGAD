@@ -4,7 +4,7 @@ import os
 import FrEIA.framework as Ff
 import FrEIA.modules as Fm
 from main import parse_args
-from engines.bgad_fas_train_engine import train
+from engines.bgad_train_engine import train
 from datasets import create_fas_data_loader
 
 def build_optimized_flow_model(input_dim, cond_dim, n_layers=4):
