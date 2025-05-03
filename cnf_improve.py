@@ -64,7 +64,7 @@ def main():
 
     for epoch in range(args.meta_epochs):
         print(f"\n[Epoch {epoch}] Training...")
-        img_auc, pix_auc, _ = train(args, epoch, [normal_loader, train_loader], encoder, [decoder], optimizer)
+        img_auc, pix_auc, _ = train(args)
 
         if img_auc > best_score:
             best_score = img_auc
