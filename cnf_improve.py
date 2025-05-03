@@ -35,6 +35,9 @@ def main():
     args.margin_tau = 0.1
     args.pos_beta = 0.05
     args.flow_arch = 'conditional_flow_model'
+    
+    # Fix per errore crop_size
+    args.crop_size = args.inp_size
 
     # Early stopping config
     patience = 4
