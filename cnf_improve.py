@@ -24,7 +24,7 @@ def build_optimized_flow_model(input_dim, cond_dim, n_layers=4):
             ),
             affine_clamping=1.9,
             global_affine_type='SOFTPLUS',
-            permute_soft=True
+            permute_soft=False
         )
     return flow
 
