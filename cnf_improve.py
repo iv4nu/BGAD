@@ -39,8 +39,9 @@ def main():
     args.pos_beta = 0.05
     args.data_strategy = '0,1'
     args.num_anomalies = 5
-    args.crop_size = args.inp_size
-    args.img_size = args.inp_size
+    
+    args.crop_size = (args.inp_size, args.inp_size)
+    args.img_size = (args.inp_size, args.inp_size)
     args.norm_mean = [0.485, 0.456, 0.406]
     args.norm_std = [0.229, 0.224, 0.225]
     args.save_result = True
