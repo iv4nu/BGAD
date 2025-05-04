@@ -4,8 +4,9 @@ import os
 import FrEIA.framework as Ff
 import FrEIA.modules as Fm
 from main import parse_args
-from engines.bgad_train_engine import train  # <-- Fix corretto qui
+from engines.bgad_fas_train_engine import train
 from datasets import create_fas_data_loader
+
 
 def build_optimized_flow_model(input_dim, cond_dim, n_layers=4):
     flow = Ff.SequenceINN(input_dim)
@@ -27,23 +28,23 @@ def build_optimized_flow_model(input_dim, cond_dim, n_layers=4):
         )
     return flow
 
+
 def main():
     args = parse_args()
 
-    # Parametri specifici per test ottimizzato
+    # Override parametri
     args.class_name = 'bottle'
+    args.flow_arch = 'conditional_flow_model'
     args.margin_tau = 0.1
     args.pos_beta = 0.05
-    args.flow_arch = 'conditional_flow_model'
-
-    # Fix compatibilità dataset
+    args.data_strategy = '0,1'
+    args.num_anomalies = 5
     args.crop_size = args.inp_size
     args.img_size = args.inp_size
     args.norm_mean = [0.485, 0.456, 0.406]
     args.norm_std = [0.229, 0.224, 0.225]
-
-    # Device fix
-    args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    args.save_result = True
+    
 
     # Early stopping config
     patience = 5
@@ -53,12 +54,8 @@ def main():
 
     normal_loader, train_loader, test_loader = create_fas_data_loader(args)
 
-    # Override del decoder con modello ottimizzato
-    decoder = build_optimized_flow_model(input_dim=2048, cond_dim=args.pos_embed_dim)
-    decoder = decoder.to(args.device)
-
-    encoder = torch.hub.load('rwightman/gen-efficientnet-pytorch', args.backbone_arch, pretrained=True)
-    encoder = encoder.to(args.device)
+    encoder = torch.hub.load('rwightman/gen-efficientnet-pytorch', args.backbone_arch, pretrained=True).cuda()
+    decoder = build_optimized_flow_model(input_dim=2048, cond_dim=args.pos_embed_dim).cuda()
 
     optimizer = torch.optim.Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr, weight_decay=1e-4)
 
@@ -78,6 +75,7 @@ def main():
         if stop_counter >= patience:
             print("[EarlyStopping] Fermata anticipata del training.")
             break
+
 
 if __name__ == '__main__':
     main()
