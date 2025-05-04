@@ -24,7 +24,7 @@ def build_optimized_flow_model(input_dim, cond_dim, n_layers=4):
             ),
             affine_clamping=1.9,
             global_affine_type='SOFTPLUS',
-            permute_soft=False
+            permute_soft=True
         )
     return flow
 
@@ -44,12 +44,12 @@ def main():
     args.img_size = (args.inp_size, args.inp_size)
     args.norm_mean = [0.485, 0.456, 0.406]
     args.norm_std = [0.229, 0.224, 0.225]
-    args.save_result = True
+    args.save_results = True
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # Warmup defaults
-    args.lr_warmup_from = 0.0001
-    args.lr_warmup_to = 0.001
+    args.lr_warmup_from = 0.0
+    args.lr_warmup_to = args.lr
 
     # Early stopping config
     patience = 5
