@@ -47,6 +47,9 @@ def main():
     args.save_result = True
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
+    # Warmup defaults
+    args.lr_warmup_from = 0.0001
+    args.lr_warmup_to = 0.001
 
     # Early stopping config
     patience = 5
