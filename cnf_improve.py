@@ -6,17 +6,10 @@ import FrEIA.modules as Fm
 from main import parse_args
 from engines.bgad_fas_train_engine import train
 from datasets import create_fas_data_loader
-from adaptiveBoundary import AdaptiveBoundaryHook
+from adaptive_boundary_hook import AdaptiveBoundaryHook
 
 
-# Inizializza l'hook con i log-likelihood delle patch normali
-adaptive_hook = AdaptiveBoundaryHook(
-    epsilon_range=(0.01, 0.05),
-    alpha=0.2,
-    bayesian=True,
-    n_bootstrap=100,
-    verbose=True
-)
+
 
 def build_optimized_flow_model(input_dim, cond_dim, n_layers=4):
     flow = Ff.SequenceINN(input_dim)
@@ -41,6 +34,17 @@ def build_optimized_flow_model(input_dim, cond_dim, n_layers=4):
 
 def main():
     args = parse_args()
+    
+    boundary_hook = AdaptiveBoundaryHook(
+    alpha=0.2,
+    epsilon=0.01,
+    max_epsilon=0.05,
+    n_bootstrap=100,
+    search_epsilon=True,
+    log_path=os.path.join(args.output_dir, args.exp_name, "adaptive_boundary_log.csv"),
+    verbose=True
+)
+
 
     # Override parametri
     args.class_name = 'wood'
@@ -76,7 +80,7 @@ def main():
 
     for epoch in range(args.meta_epochs):
         print(f"\n[Epoch {epoch}] Training...")
-        img_auc, pix_auc, _ = train(args,boundary_hook=adaptive_hook)
+        img_auc, pix_auc, _ = train(args,boundary_hook=boundary_hook)
 
         if img_auc > best_score:
             best_score = img_auc
