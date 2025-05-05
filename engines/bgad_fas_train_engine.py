@@ -13,10 +13,11 @@ from models import positionalencoding2d, load_flow_model
 from losses import get_logp_boundary, calculate_bg_spp_loss, normal_fl_weighting, abnormal_fl_weighting
 from utils.visualizer import plot_visualizing_results
 from utils.utils import MetricRecorder, calculate_pro_metric, convert_to_anomaly_scores, evaluate_thresholds
+from improve2 import estimate_adaptive_delta
 
 log_theta = torch.nn.LogSigmoid()
 
-
+''' 
 def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
     N_batch = 4096
     decoders = [decoder.train() for decoder in decoders]  # 3
@@ -129,6 +130,64 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
         # mean_loss = total_loss / loss_count
         # print('Epoch: {:d}.{:d} \t train loss: {:.4f}, lr={:.6f}'.format(epoch, sub_epoch, mean_loss, lr))
 
+'''
+def train_meta_epoch(args, epoch, loaders, encoder, decoders, optimizer, boundary_hook=None):
+    encoder.eval()
+    [normal_loader, train_loader] = loaders
+    for decoder in decoders:
+        decoder.train()
+
+    for (normal_data, _), (train_data, _) in zip(normal_loader, train_loader):
+        inputs = train_data.to(args.device)
+        optimizer.zero_grad()
+
+        # Forward pass
+        with torch.no_grad():
+            features = encoder(inputs)
+
+        total_loss = 0.0
+        for level in range(args.feature_levels):
+            z, log_jac_det = decoders[level](features[level])
+            dim = z.shape[-1]
+            log_prob = get_logp(dim, z, log_jac_det) / dim
+            loss = -log_prob.mean()
+            total_loss += loss
+
+        total_loss.backward()
+        optimizer.step()
+
+        # Calcolo delle log-likelihood per aggiornare il confine
+        with torch.no_grad():
+            normal_inputs = normal_data.to(args.device)
+            normal_features = encoder(normal_inputs)
+            all_log_likelihoods = []
+
+            for level in range(args.feature_levels):
+                z_normal, log_jac_det_normal = decoders[level](normal_features[level])
+                dim = z_normal.shape[-1]
+                log_prob_normal = get_logp(dim, z_normal, log_jac_det_normal) / dim
+                all_log_likelihoods.append(log_prob_normal.view(log_prob_normal.size(0), -1))
+
+            # Concatenazione delle likelihoods di tutti i livelli
+            normal_log_likelihoods = torch.cat(all_log_likelihoods, dim=1)
+            normal_log_likelihoods = normal_log_likelihoods.view(-1).detach().cpu().numpy()
+
+            if boundary_hook is not None:
+                # Calcolo delta stabile con metodo combinato
+                fused_delta, std_delta, best_epsilon = get_stable_boundary(
+                    normal_log_likelihoods,
+                    start_epsilon=boundary_hook.epsilon,
+                    max_epsilon=boundary_hook.max_epsilon,
+                    n_bootstrap=boundary_hook.n_bootstrap
+                )
+
+                # Aggiorna delta globale con media esponenziale
+                if boundary_hook.delta is None:
+                    boundary_hook.delta = fused_delta
+                else:
+                    boundary_hook.delta = (1 - boundary_hook.alpha) * boundary_hook.delta + boundary_hook.alpha * fused_delta
+
+                print(f"[BoundaryHook] Δ aggiornato: {round(boundary_hook.delta, 4)} (ε: {round(best_epsilon, 4)}, ±{round(std_delta, 4)})")
 
 def validate(args, epoch, data_loader, encoder, decoders):
     print('\nCompute loss and scores on category: {}'.format(args.class_name))
@@ -202,7 +261,7 @@ def validate(args, epoch, data_loader, encoder, decoders):
     return img_auc, pix_auc, pix_pro
 
 
-def train(args):
+def train(args,boundary_hook=None):
     # Feature Extractor
     encoder = timm.create_model(args.backbone_arch, features_only=True, 
                 out_indices=[i+1 for i in range(args.feature_levels)], pretrained=True)
@@ -242,7 +301,8 @@ def train(args):
             load_weights(encoder, decoders, args.checkpoint)
 
         print('Train meta epoch: {}'.format(epoch))
-        train_meta_epoch(args, epoch, [normal_loader, train_loader], encoder, decoders, optimizer)
+        boundary_hook = BoundaryHook(alpha=0.2) if boundary_hook is None else boundary_hook
+        train_meta_epoch(args, epoch, [normal_loader, train_loader], encoder, decoders, optimizer, boundary_hook=boundary_hook)
 
         img_auc, pix_auc, pix_pro = validate(args, epoch, test_loader, encoder, decoders)
 
