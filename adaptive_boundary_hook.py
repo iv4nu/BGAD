@@ -66,8 +66,11 @@ class AdaptiveBoundaryHook:
         if self.verbose:
             print(f"[AdaptiveBoundaryHook] Epoch {epoch}: Δ={self.delta:.4f}, ε={best_epsilon:.4f}, ±{delta_std:.4f}")
 
-        if self.log_path is not None and epoch is not None:
-            with open(self.log_path, 'a') as f:
-                f.write(f"{epoch},{best_epsilon:.4f},{self.delta:.4f},{delta_std:.4f}\n")
+        if self.log_path is not None:
+            log_dir = os.path.dirname(self.log_path)
+            os.makedirs(log_dir, exist_ok=True)
+            with open(self.log_path, 'w') as f:
+                f.write("epoch,epsilon,delta,std_delta\n")
+
 
         return self.delta

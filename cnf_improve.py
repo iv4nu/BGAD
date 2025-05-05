@@ -41,7 +41,7 @@ def main():
     max_epsilon=0.05,
     n_bootstrap=100,
     search_epsilon=True,
-    log_path=os.path.join(args.output_dir, args.exp_name, "adaptive_boundary_log.csv"),
+    log_path = os.path.join("/kaggle/working/BGAD", "adaptive_boundary_log.csv"),
     verbose=True
 )
 
