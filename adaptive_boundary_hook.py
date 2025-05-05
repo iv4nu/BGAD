@@ -4,13 +4,15 @@ import os
 class AdaptiveBoundaryHook:
     def __init__(
         self,
-        alpha=0.2,
+        alpha=0.1,
         epsilon=0.01,
         max_epsilon=0.05,
-        n_bootstrap=100,
+        n_bootstrap=50,
         search_epsilon=True,
         log_path=None,
-        verbose=True
+        verbose=True,
+        warmup_epochs=5,
+        max_delta_change=0.05
     ):
         self.alpha = alpha
         self.epsilon = epsilon
@@ -18,17 +20,19 @@ class AdaptiveBoundaryHook:
         self.n_bootstrap = n_bootstrap
         self.search_epsilon = search_epsilon
         self.verbose = verbose
-        self.delta = None
         self.log_path = log_path
+        self.warmup_epochs = warmup_epochs
+        self.max_delta_change = max_delta_change
+        self.delta = None
 
         if self.log_path is not None:
+            os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
             with open(self.log_path, 'w') as f:
                 f.write("epoch,epsilon,delta,std_delta\n")
 
-    def find_adaptive_epsilon(self, ll):## ll è la patch 
+    def find_adaptive_epsilon(self, ll):
         best_epsilon = self.epsilon
         best_gap = -np.inf
-
         for eps in np.linspace(self.epsilon, self.max_epsilon, 10):
             boundary = np.percentile(ll, eps * 100)
             inside = ll[ll >= boundary]
@@ -43,7 +47,7 @@ class AdaptiveBoundaryHook:
 
     def bayesian_boundary_estimate(self, ll, epsilon):
         n = len(ll)
-        boundaries = []#saranno contenuti i confini dei diversi bootstrap
+        boundaries = []
         for _ in range(self.n_bootstrap):
             sample = np.random.choice(ll, n, replace=True)
             b = np.percentile(sample, epsilon * 100)
@@ -51,26 +55,27 @@ class AdaptiveBoundaryHook:
         return np.mean(boundaries), np.std(boundaries)
 
     def update(self, ll, epoch=None):
-        if self.search_epsilon:
-            best_epsilon = self.find_adaptive_epsilon(ll)
-        else:
+        # Warm-up: usa epsilon fisso
+        if epoch is not None and epoch < self.warmup_epochs:
             best_epsilon = self.epsilon
+        else:
+            best_epsilon = self.find_adaptive_epsilon(ll) if self.search_epsilon else self.epsilon
 
         delta_mean, delta_std = self.bayesian_boundary_estimate(ll, best_epsilon)
 
         if self.delta is None:
             self.delta = delta_mean
         else:
-            self.delta = (1 - self.alpha) * self.delta + self.alpha * delta_mean
+            delta_change = delta_mean - self.delta
+            delta_change = np.clip(delta_change, -self.max_delta_change, self.max_delta_change)
+            self.delta += self.alpha * delta_change
 
         if self.verbose:
             print(f"[AdaptiveBoundaryHook] Epoch {epoch}: Δ={self.delta:.4f}, ε={best_epsilon:.4f}, ±{delta_std:.4f}")
 
-        if self.log_path is not None:
-            log_dir = os.path.dirname(self.log_path)
-            os.makedirs(log_dir, exist_ok=True)
-            with open(self.log_path, 'w') as f:
-                f.write("epoch,epsilon,delta,std_delta\n")
-
+        if self.log_path is not None and epoch is not None:
+            with open(self.log_path, 'a') as f:
+                f.write(f"{epoch},{best_epsilon:.4f},{self.delta:.4f},{delta_std:.4f}\n")
 
         return self.delta
+
