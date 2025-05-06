@@ -111,6 +111,7 @@ def get_logp_boundary(
             if gap > best_gap:
                 best_gap = gap
                 best_eps = eps
+                print(f"nuovo epsilon trovato pari a: {eps}")
         pos_beta = best_eps
 
     # Calcolo soglia finale
