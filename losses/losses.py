@@ -43,7 +43,7 @@ def abnormal_fl_weighting(logps, gamma=2, alpha=0.53, normalizer=10):
 
     return weights
 
-
+''' 
 def get_logp_boundary(logps, mask, pos_beta=0.05, margin_tau=0.1, normalizer=10):
     """
     Find the equivalent log-likelihood decision boundaries from normal log-likelihood distribution.
@@ -63,6 +63,62 @@ def get_logp_boundary(logps, mask, pos_beta=0.05, margin_tau=0.1, normalizer=10)
 
     b_a = b_n - margin_tau  # abnormal boundary
 
+    return b_n, b_a
+'''
+#Proviamo il pos_beta adattivo
+
+def get_logp_boundary(
+    logps,
+    mask,
+    pos_beta=0.05,
+    margin_tau=0.1,
+    normalizer=10,
+    adaptive=True,
+    min_eps=0.01,
+    max_eps=0.1,
+    n_steps=10,
+    epoch=None,
+    warmup_epochs=7
+):
+    """
+    Adaptive or fixed boundary from normal log-likelihoods.
+    If adaptive=True and epoch >= warmup_epochs, finds optimal pos_beta by maximizing gap.
+
+    Args:
+        logps: tensor of log-likelihoods
+        mask: tensor (0 = normal, 1 = anomaly)
+        pos_beta: used during warm-up or if adaptive=False
+        margin_tau: b_a = b_n - tau
+        adaptive: enable adaptive pos_beta
+        epoch: current epoch number
+        warmup_epochs: fixed pos_beta used before this
+    """
+    normal_logps = logps[mask == 0].detach()
+
+    use_adaptive = adaptive and (epoch is None or epoch >= warmup_epochs)
+    
+    if use_adaptive:
+        best_eps = pos_beta
+        best_gap = -np.inf
+        for eps in np.linspace(min_eps, max_eps, n_steps):
+            threshold = np.percentile(t2np(normal_logps), eps * 100)
+            inside = normal_logps[normal_logps >= threshold]
+            outside = normal_logps[normal_logps < threshold]
+            if len(inside) == 0 or len(outside) == 0:
+                continue
+            gap = torch.min(inside) - torch.max(outside)
+            if gap > best_gap:
+                best_gap = gap
+                best_eps = eps
+        pos_beta = best_eps
+
+    # Calcolo soglia finale
+    n_idx = int(((mask == 0).sum() * pos_beta).item())
+    sorted_indices = torch.sort(normal_logps)[1]
+    n_idx = sorted_indices[n_idx]
+    b_n = normal_logps[n_idx]
+    b_n = b_n / normalizer
+    b_a = b_n - margin_tau
     return b_n, b_a
 
 

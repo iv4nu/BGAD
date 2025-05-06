@@ -106,7 +106,8 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                                 loss_ml = -log_theta(logps[m_b == 0])
                                 loss_ml = torch.mean(loss_ml)
                 
-                            boundaries = get_logp_boundary(logps, m_b, args.pos_beta, args.margin_tau, args.normalizer)
+                            #boundaries = get_logp_boundary(logps, m_b, args.pos_beta, args.margin_tau, args.normalizer)
+                            boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=True,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
                             #print('feature level: {}, pos_beta: {}, boudaris: {}'.format(l, args.pos_beta, boundaries))
                             if args.focal_weighting:
                                 loss_n_con, loss_a_con = calculate_bg_spp_loss(logps, m_b, boundaries, args.normalizer, weights=weights)
