@@ -246,14 +246,16 @@ def train(args, boundary_hook=None):
     os.makedirs(log_dir, exist_ok=True)
     
     boundary_hook = AdaptiveBoundaryHook(
-    alpha=0.2,
-    epsilon=0.01,
-    max_epsilon=0.05,
+    alpha=0.1,
+    warmup_epsilon=0.05,       # epsilon iniziale durante il warm-up
+    min_epsilon=0.01,          # minimo valore per ricerca
+    max_epsilon=0.1,           # massimo valore per ricerca
     search_epsilon=True,
     log_path=os.path.join(args.output_dir, args.exp_name, "adaptive_boundary_log.csv"),
-    verbose=True,
-    warmup_epochs=5,             # ✅ per stabilizzare inizio
-    max_delta_change=0.05
+    verbose=False,
+    warmup_epochs=7,
+    max_delta_change=0.05,
+    min_gap_change=0.001
 )
 
     
