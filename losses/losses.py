@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+from utils import t2np
 
 
 def normal_fl_weighting(logps, gamma=0.5, alpha=11.7, normalizer=10):
