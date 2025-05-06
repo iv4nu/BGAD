@@ -247,7 +247,7 @@ def train(args, boundary_hook=None):
     
     boundary_hook = AdaptiveBoundaryHook(
     alpha=0.1,
-    warmup_epsilon=0.05,       # epsilon iniziale durante il warm-up
+    warmup_epsilon=0.01,       # epsilon iniziale durante il warm-up
     min_epsilon=0.01,          # minimo valore per ricerca
     max_epsilon=0.1,           # massimo valore per ricerca
     search_epsilon=True,
