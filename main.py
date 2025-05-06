@@ -27,7 +27,7 @@ def main_single(args):
     
     # selecting train functions
     if args.with_fas:
-        from engines.bgad_fas_train_engine import train
+        from engines.bgad_fas_train_engine2 import train
         img_auc, pix_auc, pix_pro = train(args)
     else:
         from engines.bgad_train_engine import train

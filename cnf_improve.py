@@ -6,7 +6,7 @@ import FrEIA.modules as Fm
 from main import parse_args
 from engines.bgad_fas_train_engine import train
 from datasets import create_fas_data_loader
-from adaptive_boundary_hook import AdaptiveBoundaryHook
+
 
 
 
@@ -35,18 +35,6 @@ def build_optimized_flow_model(input_dim, cond_dim, n_layers=4):
 def main():
     args = parse_args()
     
-    boundary_hook = AdaptiveBoundaryHook(
-    alpha=0.1,
-    warmup_epsilon=0.01,       # epsilon iniziale durante il warm-up
-    min_epsilon=0.01,          # minimo valore per ricerca
-    max_epsilon=0.1,           # massimo valore per ricerca
-    search_epsilon=True,
-    log_path = os.path.join("/kaggle/working/BGAD", "adaptive_boundary_log.csv"),
-    verbose=False,
-    warmup_epochs=7,
-    max_delta_change=0.05,
-    min_gap_change=0.001 
-)
 
 
     # Override parametri
@@ -83,7 +71,7 @@ def main():
 
     for epoch in range(args.meta_epochs):
         print(f"\n[Epoch {epoch}] Training...")
-        img_auc, pix_auc, _ = train(args,boundary_hook=boundary_hook)
+        img_auc, pix_auc, _ = train(args)
 
         if img_auc > best_score:
             best_score = img_auc

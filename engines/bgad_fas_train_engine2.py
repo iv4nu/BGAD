@@ -13,11 +13,15 @@ from models import positionalencoding2d, load_flow_model
 from losses import get_logp_boundary, calculate_bg_spp_loss, normal_fl_weighting, abnormal_fl_weighting
 from utils.visualizer import plot_visualizing_results
 from utils.utils import MetricRecorder, calculate_pro_metric, convert_to_anomaly_scores, evaluate_thresholds
+from adaptive_boundary_hook import AdaptiveBoundaryHook
+
+
+
 
 log_theta = torch.nn.LogSigmoid()
 
 
-def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
+def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer, boundary_hook):
     N_batch = 4096
     decoders = [decoder.train() for decoder in decoders]  # 3
     adjust_learning_rate(args, optimizer, epoch)
@@ -105,8 +109,12 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                             else:
                                 loss_ml = -log_theta(logps[m_b == 0])
                                 loss_ml = torch.mean(loss_ml)
+                                
+                                with torch.no_grad():
+                                    normal_logps = logps[m_b == 0].detach().cpu().numpy()
+                                    bn = boundary_hook.update(normal_logps, epoch=epoch)
+                                boundaries = [bn, bn - args.margin_tau]
                 
-                            boundaries = get_logp_boundary(logps, m_b, args.pos_beta, args.margin_tau, args.normalizer)
                             #print('feature level: {}, pos_beta: {}, boudaris: {}'.format(l, args.pos_beta, boundaries))
                             if args.focal_weighting:
                                 loss_n_con, loss_a_con = calculate_bg_spp_loss(logps, m_b, boundaries, args.normalizer, weights=weights)
@@ -202,7 +210,7 @@ def validate(args, epoch, data_loader, encoder, decoders):
     return img_auc, pix_auc, pix_pro
 
 
-def train(args):
+def train(args, boundary_hook=None):
     # Feature Extractor
     encoder = timm.create_model(args.backbone_arch, features_only=True, 
                 out_indices=[i+1 for i in range(args.feature_levels)], pretrained=True)
@@ -237,12 +245,27 @@ def train(args):
     log_dir = os.path.join(args.output_dir, args.exp_name, 'logs')
     os.makedirs(log_dir, exist_ok=True)
     
+    boundary_hook = AdaptiveBoundaryHook(
+    alpha=0.1,
+    warmup_epsilon=0.01,       # epsilon iniziale durante il warm-up
+    min_epsilon=0.01,          # minimo valore per ricerca
+    max_epsilon=0.1,           # massimo valore per ricerca
+    search_epsilon=True,
+    log_path=os.path.join(args.output_dir, args.exp_name, "adaptive_boundary_log.csv"),
+    verbose=False,
+    warmup_epochs=7,
+    max_delta_change=0.05,
+    min_gap_change=0.001
+)
+
+    
+    
     for epoch in range(args.meta_epochs):
         if args.checkpoint:
             load_weights(encoder, decoders, args.checkpoint)
 
         print('Train meta epoch: {}'.format(epoch))
-        train_meta_epoch(args, epoch, [normal_loader, train_loader], encoder, decoders, optimizer)
+        train_meta_epoch(args, epoch, [normal_loader, train_loader], encoder, decoders, optimizer, boundary_hook)
 
         img_auc, pix_auc, pix_pro = validate(args, epoch, test_loader, encoder, decoders)
 
