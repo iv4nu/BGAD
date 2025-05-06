@@ -79,7 +79,7 @@ def get_logp_boundary(
     max_eps=0.1,
     n_steps=10,
     epoch=None,
-    warmup_epochs=7
+    warmup_epochs=5
 ):
     """
     Adaptive or fixed boundary from normal log-likelihoods.
