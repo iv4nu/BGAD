@@ -39,10 +39,11 @@ def main():
     alpha=0.2,
     epsilon=0.01,
     max_epsilon=0.05,
-    n_bootstrap=100,
     search_epsilon=True,
     log_path = os.path.join("/kaggle/working/BGAD", "adaptive_boundary_log.csv"),
-    verbose=True
+    verbose=True,
+    warmup_epochs=5,             # ✅ per stabilizzare inizio
+    max_delta_change=0.05 
 )
 
 
