@@ -74,7 +74,7 @@ def get_logp_boundary(
     pos_beta=0.05,
     margin_tau=0.1,
     normalizer=10,
-    adaptive=True,
+    adaptive=False,
     min_eps=0.01,
     max_eps=0.1,
     n_steps=10,

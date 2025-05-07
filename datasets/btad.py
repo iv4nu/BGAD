@@ -121,7 +121,7 @@ class BTADFSDataset(Dataset):
         
         # load dataset
         self.n_imgs, self.n_labels, self.n_masks, self.a_imgs, self.a_labels, self.a_masks = self.load_dataset_folder()
-        self.a_imgs = self.a_imgs * self.reuse_times
+        self.a_imgs = self.a_imgs * self.reuse_times#il numero di immagini anomale diventa #reuse_time più grande
         self.a_labels = self.a_labels * self.reuse_times
         self.a_masks = self.a_masks * self.reuse_times
         # set transforms
