@@ -11,7 +11,7 @@ from sklearn.metrics import roc_auc_score
 from utils import t2np, get_logp, adjust_learning_rate, warmup_learning_rate, save_results, save_weights, load_weights
 from datasets import create_fas_data_loader
 from models import positionalencoding2d, load_flow_model
-from losses import get_logp_boundary, calculate_bg_spp_loss, normal_fl_weighting, abnormal_fl_weighting,get_logp_boundaryS
+from losses import get_logp_boundary, calculate_bg_spp_loss, normal_fl_weighting, abnormal_fl_weighting
 from utils.visualizer import plot_visualizing_results
 from utils.utils import MetricRecorder, calculate_pro_metric, convert_to_anomaly_scores, evaluate_thresholds
 from sklearn.metrics import precision_score, recall_score
