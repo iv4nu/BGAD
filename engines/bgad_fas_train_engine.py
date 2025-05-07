@@ -3,6 +3,7 @@ import math
 import timm
 import torch
 import json
+import csv
 import numpy as np
 from tqdm import tqdm
 import torch.nn.functional as F
@@ -10,9 +11,11 @@ from sklearn.metrics import roc_auc_score
 from utils import t2np, get_logp, adjust_learning_rate, warmup_learning_rate, save_results, save_weights, load_weights
 from datasets import create_fas_data_loader
 from models import positionalencoding2d, load_flow_model
-from losses import get_logp_boundary, calculate_bg_spp_loss, normal_fl_weighting, abnormal_fl_weighting
+from losses import get_logp_boundary, calculate_bg_spp_loss, normal_fl_weighting, abnormal_fl_weighting,get_logp_boundaryS
 from utils.visualizer import plot_visualizing_results
 from utils.utils import MetricRecorder, calculate_pro_metric, convert_to_anomaly_scores, evaluate_thresholds
+from sklearn.metrics import precision_score, recall_score
+
 
 log_theta = torch.nn.LogSigmoid()
 
@@ -106,13 +109,13 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                                 loss_ml = -log_theta(logps[m_b == 0])
                                 loss_ml = torch.mean(loss_ml)
                 
-                            #boundaries = get_logp_boundary(logps, m_b, args.pos_beta, args.margin_tau, args.normalizer)
                             boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=True,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
                             #print('feature level: {}, pos_beta: {}, boudaris: {}'.format(l, args.pos_beta, boundaries))
                             if args.focal_weighting:
                                 loss_n_con, loss_a_con = calculate_bg_spp_loss(logps, m_b, boundaries, args.normalizer, weights=weights)
                             else:
                                 loss_n_con, loss_a_con = calculate_bg_spp_loss(logps, m_b, boundaries, args.normalizer)
+
                         
                             loss = loss_ml + args.bgspp_lambda * (loss_n_con + loss_a_con)
                         
@@ -187,6 +190,7 @@ def validate(args, epoch, data_loader, encoder, decoders):
     # calculate segmentation AUROC
     gt_mask = np.squeeze(np.asarray(gt_mask_list, dtype=bool), axis=1)
     pix_auc = roc_auc_score(gt_mask.flatten(), scores.flatten())
+    
     #pix_auc = -1
     pix_pro = -1
     args.pro = False
@@ -198,7 +202,47 @@ def validate(args, epoch, data_loader, encoder, decoders):
         save_dir = os.path.join(args.output_dir, args.exp_name, 'vis_results', args.class_name)
         os.makedirs(save_dir, exist_ok=True)
         plot_visualizing_results(image_list, scores, img_scores, gt_mask_list, pix_threshold, 
-                                 img_threshold, save_dir, file_names, img_types)
+                               img_threshold, save_dir, file_names, img_types)
+
+    # --- Calcolo Precision e Recall pixel-level ---
+    bin_scores = (scores > 0.5).astype(np.uint8)  # threshold grezza per predizione binaria
+    gt_mask_flat = gt_mask.flatten()
+    bin_scores_flat = bin_scores.flatten()
+
+    pix_precision = precision_score(gt_mask_flat, bin_scores_flat, zero_division=0)
+    pix_recall = recall_score(gt_mask_flat, bin_scores_flat, zero_division=0)
+    # Precision e Recall pixel-level
+    TP = np.sum((gt_mask_flat == 1) & (bin_scores_flat == 1))
+    FP = np.sum((gt_mask_flat == 0) & (bin_scores_flat == 1))
+    FN = np.sum((gt_mask_flat == 1) & (bin_scores_flat == 0))
+    precision = TP / (TP + FP + 1e-8)
+    recall = TP / (TP + FN + 1e-8)
+
+    # --- Salvataggio su CSV ---
+    # Percorso completo del file CSV
+    csv_path = os.path.join(args.output_dir, args.exp_name, "metrics_summary.csv")
+
+    # Controlla se il file esiste già
+    file_exists = os.path.isfile(csv_path)
+
+    log_dir = os.path.join(args.output_dir, args.exp_name, 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+    csv_file = os.path.join(log_dir, f'{args.class_name}_metrics.csv')
+    write_header = not os.path.exists(csv_file)
+
+
+
+    # Scrivi o aggiungi al file CSV
+    with open(csv_path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        if not file_exists:
+            writer.writerow(["Epoch", "Loss", "Precision", "Recall", "IMG_AUROC", "PIX_AUROC"])
+        writer.writerow([epoch, round(mean_loss, 4), round(precision, 4), round(recall, 4),
+                        round(img_auc * 100, 2), round(pix_auc * 100, 2)])
+    with open(csv_file, 'a') as f:
+        if write_header:
+            f.write("epoch,loss,img_auc,pix_auc,precision,recall\n")
+        f.write(f"{epoch},{mean_loss:.4f},{img_auc:.4f},{pix_auc:.4f},{pix_precision:.4f},{pix_recall:.4f}\n")
 
     return img_auc, pix_auc, pix_pro
 

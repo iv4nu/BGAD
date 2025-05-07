@@ -168,7 +168,7 @@ class BTADFSDataset(Dataset):
         return len(self.n_imgs) + len(self.a_imgs)
 
     def load_dataset_folder(self):
-        n_img_paths, n_labels, n_mask_paths = [], [], []  # normal
+        n_img_paths, n_labels, n_mask_paths = [], [], []  # normal, si mantiene il path delle immagini normali, le maschere , e il path delle maschere 
         a_img_paths, a_labels, a_mask_paths = [], [], []  # abnormal
 
         img_dir = os.path.join(self.dataset_path, self.class_name, 'test')
