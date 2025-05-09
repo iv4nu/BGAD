@@ -33,6 +33,8 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
         data_loader = data_loader[1]
     for sub_epoch in range(args.sub_epochs):
         total_loss, loss_count = 0.0, 0
+        total_contrastive_loss = 0.0  # mod 3
+
         for i, (data) in enumerate(tqdm(data_loader)):
             # warm-up learning rate
             lr = warmup_learning_rate(args, epoch, i+sub_epoch*I, I*args.sub_epochs, optimizer)
@@ -118,6 +120,22 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
 
                         
                             loss = loss_ml + args.bgspp_lambda * (loss_n_con + loss_a_con)
+                            
+                            '''params = list(decoders[0].parameters())
+                            for l in range(1, args.feature_levels):
+                                params += list(decoders[l].parameters())''' #cancellato per mod 3
+
+                            #mod3 start
+                            normal_feats = e_b[m_b == 0]
+                            anomaly_feats = e_b[m_b == 1]
+
+                            if len(normal_feats) > 0 and len(anomaly_feats) > 0:
+                                center_normal = torch.mean(normal_feats, dim=0, keepdim=True)
+                                contrastive_loss = F.pairwise_distance(center_normal, anomaly_feats).mean()
+                                loss += args.encoder_contrastive_weight * contrastive_loss  # <-- aggiunta qui
+                                total_contrastive_loss += contrastive_loss.item()  # #mod 3 stop
+
+
                         
                         optimizer.zero_grad()
                         loss.backward()
@@ -129,6 +147,11 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                         else:
                             total_loss += loss.item()
                             loss_count += 1
+    
+    print(f"[Epoch {epoch}] Mean contrastive loss: {total_contrastive_loss:.4f}") #mod3
+    
+    return total_contrastive_loss / (loss_count + 1e-8)  # per evitare divisione per zero
+ #mod 3
 
         # mean_loss = total_loss / loss_count
         # print('Epoch: {:d}.{:d} \t train loss: {:.4f}, lr={:.6f}'.format(epoch, sub_epoch, mean_loss, lr))
@@ -251,15 +274,25 @@ def train(args):
     # Feature Extractor
     encoder = timm.create_model(args.backbone_arch, features_only=True, 
                 out_indices=[i+1 for i in range(args.feature_levels)], pretrained=True)
-    encoder = encoder.to(args.device).eval()
+    encoder=encoder.to(args.device)#modificato
+    encoder.train()##modificato
+    #encoder = encoder.to(args.device).eval() modificato per introdurre 3 modifica
     feat_dims = encoder.feature_info.channels()
     
     # Normalizing Flows
     decoders = [load_flow_model(args, feat_dim) for feat_dim in feat_dims]
     decoders = [decoder.to(args.device) for decoder in decoders]
-    params = list(decoders[0].parameters())
-    for l in range(1, args.feature_levels):
-        params += list(decoders[l].parameters())
+    
+    #params = list(decoders[0].parameters())# mod 3
+    #for l in range(1, args.feature_levels): #mod 3
+     #   params += list(decoders[l].parameters()) mod 3
+     
+     
+    #
+    params = list(encoder.parameters())  # <-- Aggiungi anche i parametri dell'encoder #mod3
+    for l in range(args.feature_levels): #mod 3
+        params += list(decoders[l].parameters())# mod 3
+    
     # optimizer
     optimizer = torch.optim.Adam(params, lr=args.lr)
     # data loaders
@@ -287,9 +320,24 @@ def train(args):
             load_weights(encoder, decoders, args.checkpoint)
 
         print('Train meta epoch: {}'.format(epoch))
-        train_meta_epoch(args, epoch, [normal_loader, train_loader], encoder, decoders, optimizer)
-
+        #train_meta_epoch(args, epoch, [normal_loader, train_loader], encoder, decoders, optimizer)#mod3
+        contrastive_loss_epoch =train_meta_epoch(args, epoch, [normal_loader, train_loader], encoder, decoders, optimizer)#mod 3
+        
         img_auc, pix_auc, pix_pro = validate(args, epoch, test_loader, encoder, decoders)
+        # Appendi il contrastive_loss alla riga CSV
+        
+        #mod 3 start
+        csv_path = os.path.join(args.output_dir, args.exp_name, "contrastiveLoss_summary.csv")
+        file_exists = os.path.isfile(csv_path)
+        with open(csv_path, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            if not file_exists:
+                writer.writerow(["Epoch","ContrastiveLoss"])
+            writer.writerow([
+                epoch,                
+                round(contrastive_loss_epoch, 4)
+            ])
+#mod 3 stop
 
         img_auc_obs.update(100.0 * img_auc, epoch)
         pix_auc_obs.update(100.0 * pix_auc, epoch)
