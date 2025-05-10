@@ -69,7 +69,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
 
                             anchor = norm_feats[perm_n[0]].unsqueeze(0)
                             positive = norm_feats[perm_n[1]].unsqueeze(0)
-                            negative = anom_feats[perm_a].unsqueeze(0)
+                            negative = anom_feats[perm_a]
 
                             alpha = 1.5
                             dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean()
