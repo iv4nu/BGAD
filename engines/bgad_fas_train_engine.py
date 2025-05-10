@@ -21,10 +21,6 @@ log_theta = torch.nn.LogSigmoid()
 
 
 def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
-   #mod3
-    triplet_log_file = os.path.join(args.output_dir, args.exp_name, "triplet_loss_log.csv")
-    write_triplet_header = not os.path.exists(triplet_log_file)
-    #mod3 stop
     N_batch = 4096
     decoders = [decoder.train() for decoder in decoders]  # 3
     adjust_learning_rate(args, optimizer, epoch)
@@ -55,41 +51,12 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                 mask_ = F.interpolate(mask, size=(h, w), mode='nearest').squeeze(1)
                 mask_ = mask_.reshape(-1)
                 e = e.permute(0, 2, 3, 1).reshape(-1, dim)
-                
-                #mod 3 start
-                # 👉 Calcolo triplet solo al livello più profondo
-                if l == args.feature_levels - 1:
-                    with torch.no_grad():
-                        norm_feats = F.normalize(e[mask_ == 0], dim=1)
-                        anom_feats = F.normalize(e[mask_ == 1], dim=1)
 
-                        if len(norm_feats) >= 2 and len(anom_feats) >= 1:
-                            perm_n = torch.randperm(len(norm_feats))[:2]
-                            perm_a = torch.randint(0, len(anom_feats), (1,))
-
-                            anchor = norm_feats[perm_n[0]].unsqueeze(0)
-                            positive = norm_feats[perm_n[1]].unsqueeze(0)
-                            negative = anom_feats[perm_a]
-
-                            alpha = 1.5
-                            dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean()
-
-                            triplet_loss = F.triplet_margin_loss(anchor, positive, negative, margin=dynamic_margin.item(), p=2)
-
-                            print(f"[Triplet - Epoch {epoch}] margin: {dynamic_margin.item():.4f}, loss: {triplet_loss.item():.4f}")
-                            # Salvataggio CSV triplet loss
-                            with open(triplet_log_file, 'a') as f:
-                                if write_triplet_header:
-                                    f.write("epoch,margin,triplet_loss\n")
-                                    write_triplet_header = False  # solo per la prima riga
-                                f.write(f"{epoch},{dynamic_margin.item():.4f},{triplet_loss.item():.4f}\n")
-
-#mod 3 stop
                 # (bs, 128, h, w)
                 pos_embed = positionalencoding2d(args.pos_embed_dim, h, w).to(args.device).unsqueeze(0).repeat(bs, 1, 1, 1)
                 pos_embed = pos_embed.permute(0, 2, 3, 1).reshape(-1, args.pos_embed_dim)
                 decoder = decoders[l]
-                
+
                 perm = torch.randperm(bs*h*w).to(args.device)
                 num_N_batches = bs*h*w // N_batch
                 for i in range(num_N_batches):
@@ -101,7 +68,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                         z, log_jac_det = decoder(e_b)  
                     else:
                         z, log_jac_det = decoder(e_b, [p_b, ])
-                    
+
                     # first epoch only training normal samples
                     if epoch == 0:
                         if m_b.sum() == 0:  # only normal loss
@@ -141,7 +108,8 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                             else:
                                 loss_ml = -log_theta(logps[m_b == 0])
                                 loss_ml = torch.mean(loss_ml)
-                
+
+                            boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=True,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
                             boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=False,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
                             #print('feature level: {}, pos_beta: {}, boudaris: {}'.format(l, args.pos_beta, boundaries))
                             if args.focal_weighting:
@@ -149,15 +117,19 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                             else:
                                 loss_n_con, loss_a_con = calculate_bg_spp_loss(logps, m_b, boundaries, args.normalizer)
 
-                        
-                            loss = loss_ml + args.bgspp_lambda * (loss_n_con + loss_a_con)
-                            
-                            params = list(decoders[0].parameters())
-                            for l in range(1, args.feature_levels):
-                                params += list(decoders[l].parameters()) 
 
-    
-    
+                            loss = loss_ml + args.bgspp_lambda * (loss_n_con + loss_a_con)
+
+                        optimizer.zero_grad()
+                        loss.backward()
+                        optimizer.step()
+                        loss_item = loss.item()
+                        if math.isnan(loss_item):
+                            total_loss += 0.0
+                            loss_count += 0
+                        else:
+                            total_loss += loss.item()
+                            loss_count += 1
 
         # mean_loss = total_loss / loss_count
         # print('Epoch: {:d}.{:d} \t train loss: {:.4f}, lr={:.6f}'.format(epoch, sub_epoch, mean_loss, lr))
@@ -165,9 +137,9 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
 
 def validate(args, epoch, data_loader, encoder, decoders):
     print('\nCompute loss and scores on category: {}'.format(args.class_name))
-    
+
     decoders = [decoder.eval() for decoder in decoders]
-    
+
     image_list, gt_label_list, gt_mask_list, file_names, img_types = [], [], [], [], []
     logps_list = [list() for _ in range(args.feature_levels)]
     total_loss, loss_count = 0.0, 0
@@ -180,14 +152,14 @@ def validate(args, epoch, data_loader, encoder, decoders):
                 img_types.extend(img_type)
             gt_label_list.extend(t2np(label))
             gt_mask_list.extend(t2np(mask))
-            
+
             image = image.to(args.device) # single scale
             features = encoder(image)  # BxCxHxW
             for l in range(args.feature_levels):
                 e = features[l]  # BxCxHxW
                 bs, dim, h, w = e.size()
                 e = e.permute(0, 2, 3, 1).reshape(-1, dim)
-               
+
                 # (bs, 128, h, w)
                 pos_embed = positionalencoding2d(args.pos_embed_dim, h, w).to(args.device).unsqueeze(0).repeat(bs, 1, 1, 1)
                 pos_embed = pos_embed.permute(0, 2, 3, 1).reshape(-1, args.pos_embed_dim)
@@ -204,10 +176,10 @@ def validate(args, epoch, data_loader, encoder, decoders):
                 total_loss += loss.item()
                 loss_count += 1
                 logps_list[l].append(logps.reshape(bs, h, w))
-    
+
     mean_loss = total_loss / loss_count
     print('Epoch: {:d} \t test_loss: {:.4f}'.format(epoch, mean_loss))
-    
+
     scores = convert_to_anomaly_scores(args, logps_list)
     # calculate detection AUROC
     img_scores = np.max(scores, axis=(1, 2))
@@ -219,13 +191,13 @@ def validate(args, epoch, data_loader, encoder, decoders):
     # calculate segmentation AUROC
     gt_mask = np.squeeze(np.asarray(gt_mask_list, dtype=bool), axis=1)
     pix_auc = roc_auc_score(gt_mask.flatten(), scores.flatten())
-    
+
     #pix_auc = -1
     pix_pro = -1
     args.pro = False
     if args.pro:
         pix_pro = calculate_pro_metric(scores, gt_mask)
-    
+
     if args.vis and epoch == args.meta_epochs - 1:
         img_threshold, pix_threshold = evaluate_thresholds(gt_label, gt_mask, img_scores, scores)
         save_dir = os.path.join(args.output_dir, args.exp_name, 'vis_results', args.class_name)
@@ -280,20 +252,15 @@ def train(args):
     # Feature Extractor
     encoder = timm.create_model(args.backbone_arch, features_only=True, 
                 out_indices=[i+1 for i in range(args.feature_levels)], pretrained=True)
-    encoder = encoder.to(args.device).eval() 
+    encoder = encoder.to(args.device).eval()
     feat_dims = encoder.feature_info.channels()
-    
+
     # Normalizing Flows
     decoders = [load_flow_model(args, feat_dim) for feat_dim in feat_dims]
     decoders = [decoder.to(args.device) for decoder in decoders]
-    
     params = list(decoders[0].parameters())
-    for l  in range(1, args.feature_levels):
+    for l in range(1, args.feature_levels):
         params += list(decoders[l].parameters())
-     
-     
-    
-    
     # optimizer
     optimizer = torch.optim.Adam(params, lr=args.lr)
     # data loaders
@@ -303,7 +270,7 @@ def train(args):
     img_auc_obs = MetricRecorder('IMG_AUROC')
     pix_auc_obs = MetricRecorder('PIX_AUROC')
     pix_pro_obs = MetricRecorder('PIX_AUPRO')
-    
+
     # Creo il dizionario per tenere traccia delle metriche
     metrics_history = {
         'epochs': [],
@@ -311,37 +278,35 @@ def train(args):
         'pix_auroc': [],
         'pix_pro': []
     }
-    
+
     # Creo la directory per i log se non esiste
     log_dir = os.path.join(args.output_dir, args.exp_name, 'logs')
     os.makedirs(log_dir, exist_ok=True)
-    
+
     for epoch in range(args.meta_epochs):
         if args.checkpoint:
             load_weights(encoder, decoders, args.checkpoint)
 
         print('Train meta epoch: {}'.format(epoch))
         train_meta_epoch(args, epoch, [normal_loader, train_loader], encoder, decoders, optimizer)
-        
-        img_auc, pix_auc, pix_pro = validate(args, epoch, test_loader, encoder, decoders)
-        
 
+        img_auc, pix_auc, pix_pro = validate(args, epoch, test_loader, encoder, decoders)
 
         img_auc_obs.update(100.0 * img_auc, epoch)
         pix_auc_obs.update(100.0 * pix_auc, epoch)
         pix_pro_obs.update(100.0 * pix_pro, epoch)
-        
+
         # Aggiungo le metriche al dizionario
         metrics_history['epochs'].append(epoch)
         metrics_history['img_auroc'].append(float(100.0 * img_auc))
         metrics_history['pix_auroc'].append(float(100.0 * pix_auc))
         metrics_history['pix_pro'].append(float(100.0 * pix_pro))
-        
+
         # Salvo il file JSON ad ogni epoca
         log_file = os.path.join(log_dir, f'{args.class_name}_metrics.json')
         with open(log_file, 'w') as f:
             json.dump(metrics_history, f, indent=4)
-        
+
     if args.save_results:
         save_results(img_auc_obs, pix_auc_obs, pix_pro_obs, args.output_dir, args.exp_name, args.model_path, args.class_name)
         save_weights(encoder, decoders, args.output_dir, args.exp_name, args.model_path)
