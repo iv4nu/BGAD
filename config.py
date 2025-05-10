@@ -57,8 +57,7 @@ def parse_args():
                         help='loss weight lambda for bg-sppc (default: 1)')
     parser.add_argument('--focal_weighting', action='store_true', default=False,
                         help='asymmetric focal weighting (default: False)')
-    parser.add_argument('--encoder_contrastive_weight', type=float, default=0.1,
-                        help='Weight for encoder contrastive loss')
+
 
     
     # learning hyperparamters

@@ -21,6 +21,10 @@ log_theta = torch.nn.LogSigmoid()
 
 
 def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
+   #mod3
+    triplet_log_file = os.path.join(args.output_dir, args.exp_name, "triplet_loss_log.csv")
+    write_triplet_header = not os.path.exists(triplet_log_file)
+    #mod3 stop
     N_batch = 4096
     decoders = [decoder.train() for decoder in decoders]  # 3
     adjust_learning_rate(args, optimizer, epoch)
@@ -52,6 +56,35 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                 mask_ = mask_.reshape(-1)
                 e = e.permute(0, 2, 3, 1).reshape(-1, dim)
                 
+                #mod 3 start
+                # 👉 Calcolo triplet solo al livello più profondo
+                if l == args.feature_levels - 1:
+                    with torch.no_grad():
+                        norm_feats = F.normalize(e[mask_ == 0], dim=1)
+                        anom_feats = F.normalize(e[mask_ == 1], dim=1)
+
+                        if len(norm_feats) >= 2 and len(anom_feats) >= 1:
+                            perm_n = torch.randperm(len(norm_feats))[:2]
+                            perm_a = torch.randint(0, len(anom_feats), (1,))
+
+                            anchor = norm_feats[perm_n[0]].unsqueeze(0)
+                            positive = norm_feats[perm_n[1]].unsqueeze(0)
+                            negative = anom_feats[perm_a].unsqueeze(0)
+
+                            alpha = 1.5
+                            dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean()
+
+                            triplet_loss = F.triplet_margin_loss(anchor, positive, negative, margin=dynamic_margin.item(), p=2)
+
+                            print(f"[Triplet - Epoch {epoch}] margin: {dynamic_margin.item():.4f}, loss: {triplet_loss.item():.4f}")
+                            # Salvataggio CSV triplet loss
+                            with open(triplet_log_file, 'a') as f:
+                                if write_triplet_header:
+                                    f.write("epoch,margin,triplet_loss\n")
+                                    write_triplet_header = False  # solo per la prima riga
+                                f.write(f"{epoch},{dynamic_margin.item():.4f},{triplet_loss.item():.4f}\n")
+
+#mod 3 stop
                 # (bs, 128, h, w)
                 pos_embed = positionalencoding2d(args.pos_embed_dim, h, w).to(args.device).unsqueeze(0).repeat(bs, 1, 1, 1)
                 pos_embed = pos_embed.permute(0, 2, 3, 1).reshape(-1, args.pos_embed_dim)
