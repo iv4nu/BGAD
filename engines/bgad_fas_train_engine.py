@@ -25,6 +25,12 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
     decoders = [decoder.train() for decoder in decoders]  # 3
     adjust_learning_rate(args, optimizer, epoch)
     I = len(data_loader)
+    
+    #mod3
+     # CSV log file per triplet loss
+    triplet_log_file = os.path.join(args.output_dir, args.exp_name, "triplet_loss_log.csv")
+    write_triplet_header = not os.path.exists(triplet_log_file)
+#mod3 stop
 
     # First epoch only training on normal samples to keep training steadily
     if epoch == 0:
@@ -51,6 +57,26 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                 mask_ = F.interpolate(mask, size=(h, w), mode='nearest').squeeze(1)
                 mask_ = mask_.reshape(-1)
                 e = e.permute(0, 2, 3, 1).reshape(-1, dim)
+
+                # ---- Triplet Loss Analitica SOLO livello finale ----
+                if l == args.feature_levels - 1:
+                    norm_feats = F.normalize(e[mask_ == 0], dim=1)
+                    anom_feats = F.normalize(e[mask_ == 1], dim=1)
+                    if len(norm_feats) >= 2 and len(anom_feats) >= 1:
+                        perm_n = torch.randperm(len(norm_feats))[:2]
+                        perm_a = torch.randint(0, len(anom_feats), (1,))
+                        anchor = norm_feats[perm_n[0]].unsqueeze(0)
+                        positive = norm_feats[perm_n[1]].unsqueeze(0)
+                        negative = anom_feats[perm_a]
+                        alpha = 1.5
+                        dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean()
+                        triplet_loss = F.triplet_margin_loss(anchor, positive, negative, margin=dynamic_margin.item(), p=2)
+                        print(f"[Triplet - Epoch {epoch}] margin: {dynamic_margin.item():.4f}, loss: {triplet_loss.item():.4f}")
+                        with open(triplet_log_file, 'a') as f:
+                            if write_triplet_header:
+                                f.write("epoch,margin,triplet_loss\n")
+                                write_triplet_header = False
+                            f.write(f"{epoch},{dynamic_margin.item():.4f},{triplet_loss.item():.4f}\n")
 
                 # (bs, 128, h, w)
                 pos_embed = positionalencoding2d(args.pos_embed_dim, h, w).to(args.device).unsqueeze(0).repeat(bs, 1, 1, 1)
@@ -109,7 +135,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                                 loss_ml = -log_theta(logps[m_b == 0])
                                 loss_ml = torch.mean(loss_ml)
 
-                            boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=True,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
+                           # boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=True,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
                             boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=False,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
                             #print('feature level: {}, pos_beta: {}, boudaris: {}'.format(l, args.pos_beta, boundaries))
                             if args.focal_weighting:
