@@ -22,36 +22,22 @@ log_theta = torch.nn.LogSigmoid()
 
 def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
     N_batch = 4096
-    # Change encoder to train mode and require gradients for last layers
-    encoder.train()
-    
-    # Freeze all parameters first
-    for param in encoder.parameters():
-        param.requires_grad = False
-    
-    # Unfreeze the last two layers of the encoder
-    # This approach is more robust and works across different model architectures
-    children_layers = list(encoder.children())
-    if len(children_layers) > 0:
-        # Try to unfreeze the last two layers of the main feature extraction part
-        for layer in children_layers[-2:]:
-            for param in layer.parameters():
-                param.requires_grad = True
-
+    encoder.train() #mod 3
     decoders = [decoder.train() for decoder in decoders]  # 3
     adjust_learning_rate(args, optimizer, epoch)
     I = len(data_loader)
-
-    # CSV log file per triplet loss
+    
+    #mod3
+     # CSV log file per triplet loss
     triplet_log_file = os.path.join(args.output_dir, args.exp_name, "triplet_loss_log.csv")
     write_triplet_header = not os.path.exists(triplet_log_file)
+#mod3 stop
 
     # First epoch only training on normal samples to keep training steadily
     if epoch == 0:
         data_loader = data_loader[0]
     else:
         data_loader = data_loader[1]
-
     for sub_epoch in range(args.sub_epochs):
         total_loss, loss_count = 0.0, 0
         for i, (data) in enumerate(tqdm(data_loader)):
@@ -64,44 +50,26 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                 image, _, mask = data
             image = image.to(args.device)  
             mask = mask.to(args.device)
-            
-            # Run encoder and get features
+            #with torch.no_grad():
             features = encoder(image)
-            
+            # SALVA PRIMA
+            #mod 3
+            encoder_weights_before = {}
+            for name, param in encoder.named_parameters():
+                if param.requires_grad:
+                    encoder_weights_before[name] = param.detach().clone() #mod 3 stop
+
             for l in range(args.feature_levels):
-                e = features[l]  
+                #e = features[l].detach()  #mod 3
+                e = features[l].detach() if epoch == 0 else features[l]
+ #mod 3
+ 
                 bs, dim, h, w = e.size()
                 mask_ = F.interpolate(mask, size=(h, w), mode='nearest').squeeze(1)
                 mask_ = mask_.reshape(-1)
                 e = e.permute(0, 2, 3, 1).reshape(-1, dim)
 
-                # ---- Triplet Loss for Final Level ----
-                triplet_loss = torch.tensor(0.0).to(args.device)
-                if l == args.feature_levels - 1:
-                    norm_feats = F.normalize(e[mask_ == 0], dim=1)
-                    anom_feats = F.normalize(e[mask_ == 1], dim=1)
-                    if len(norm_feats) >= 2 and len(anom_feats) >= 1:
-                        perm_n = torch.randperm(len(norm_feats))[:2]
-                        perm_a = torch.randint(0, len(anom_feats), (1,))
-                        anchor = norm_feats[perm_n[0]].unsqueeze(0)
-                        positive = norm_feats[perm_n[1]].unsqueeze(0)
-                        negative = anom_feats[perm_a]
-                        
-                        alpha = 1.5
-                        dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean()
-                        triplet_loss = F.triplet_margin_loss(anchor, positive, negative, 
-                                                             margin=dynamic_margin.item(), 
-                                                             p=2)
-                        
-                        # Log triplet loss details
-                        print(f"[Triplet - Epoch {epoch}] margin: {dynamic_margin.item():.4f}, loss: {triplet_loss.item():.4f}")
-                        with open(triplet_log_file, 'a') as f:
-                            if write_triplet_header:
-                                f.write("epoch,margin,triplet_loss\n")
-                                write_triplet_header = False
-                            f.write(f"{epoch},{dynamic_margin.item():.4f},{triplet_loss.item():.4f}\n")
-
-                # Positional embedding
+                # (bs, 128, h, w)
                 pos_embed = positionalencoding2d(args.pos_embed_dim, h, w).to(args.device).unsqueeze(0).repeat(bs, 1, 1, 1)
                 pos_embed = pos_embed.permute(0, 2, 3, 1).reshape(-1, args.pos_embed_dim)
                 decoder = decoders[l]
@@ -109,10 +77,13 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                 perm = torch.randperm(bs*h*w).to(args.device)
                 num_N_batches = bs*h*w // N_batch
                 for i in range(num_N_batches):
+                    
+                    
+                    
                     idx = torch.arange(i*N_batch, (i+1)*N_batch)
                     p_b = pos_embed[perm[idx]]  
                     e_b = e[perm[idx]]  
-                    m_b = mask_[perm[idx]]  
+                    m_b = mask_[perm[idx]]
                     
                     if args.flow_arch == 'flow_model':
                         z, log_jac_det = decoder(e_b)  
@@ -132,22 +103,21 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                             total_loss += loss.item()
                             loss_count += 1
                     else:
-                        # Compute main loss
                         if m_b.sum() == 0:  # only normal ml loss
                             logps = get_logp(dim, z, log_jac_det)  
                             logps = logps / dim
                             if args.focal_weighting:
-                                normal_weights = normal_fl_weighting(logps.detach())
+                                #normal_weights = normal_fl_weighting(logps.detach())
+                                normal_weights = normal_fl_weighting(logps) #mod 3
                                 loss = -log_theta(logps) * normal_weights
                                 loss = loss.mean()
                             else:
                                 loss = -log_theta(logps).mean()
-                        
                         if m_b.sum() > 0:  # normal ml loss and bg_sppc loss
                             logps = get_logp(dim, z, log_jac_det)  
                             logps = logps / dim 
                             if args.focal_weighting:
-                                logps_detach = logps.detach()
+                                logps_detach = logps #.detach() #mod 3
                                 normal_logps = logps_detach[m_b == 0]
                                 anomaly_logps = logps_detach[m_b == 1]
                                 nor_weights = normal_fl_weighting(normal_logps)
@@ -155,59 +125,86 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                                 weights = nor_weights.new_zeros(logps_detach.shape)
                                 weights[m_b == 0] = nor_weights
                                 weights[m_b == 1] = ano_weights
-                                loss_ml = -log_theta(logps[m_b == 0]) * nor_weights
+                                loss_ml = -log_theta(logps[m_b == 0]) * nor_weights # (256, )
                                 loss_ml = torch.mean(loss_ml)
                             else:
                                 loss_ml = -log_theta(logps[m_b == 0])
                                 loss_ml = torch.mean(loss_ml)
 
-                            # Compute boundary loss
-                            boundaries = get_logp_boundary(logps, m_b, margin_tau=args.margin_tau, 
-                                                           normalizer=args.normalizer, adaptive=False, 
-                                                           epoch=epoch, warmup_epochs=7)
-                            
+                           # boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=True,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
+                            boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=False,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
+                            #print('feature level: {}, pos_beta: {}, boudaris: {}'.format(l, args.pos_beta, boundaries))
                             if args.focal_weighting:
-                                loss_n_con, loss_a_con = calculate_bg_spp_loss(logps, m_b, boundaries, 
-                                                                                args.normalizer, weights=weights)
+                                loss_n_con, loss_a_con = calculate_bg_spp_loss(logps, m_b, boundaries, args.normalizer, weights=weights)
                             else:
-                                loss_n_con, loss_a_con = calculate_bg_spp_loss(logps, m_b, boundaries, 
-                                                                                args.normalizer)
+                                loss_n_con, loss_a_con = calculate_bg_spp_loss(logps, m_b, boundaries, args.normalizer)
 
-                            # Combine losses
+
+                            # === Calcolo loss principale ===
                             loss = loss_ml + args.bgspp_lambda * (loss_n_con + loss_a_con)
-                        
-                        # Add triplet loss only to the encoder for final levels
-                        # Modify the loss computation and backward pass to include triplet loss
-                        if l >= args.feature_levels - 2:  # last two levels of encoder
-                            total_loss_with_triplet = loss + args.triplet_lambda * triplet_loss
-
-                            optimizer.zero_grad()
-                            total_loss_with_triplet.backward()
-                            optimizer.step()
                             
-                            loss_item = total_loss_with_triplet.item()
-                        else:
+                           # === Calcolo loss completa + Triplet ===
+                            triplet_loss = torch.tensor(0.0, device=args.device)
+
+                            # ➕ TRIPLET LOSS nello stesso grafo computazionale (senza errore)
+                            if l == args.feature_levels - 1:
+                                with torch.no_grad():
+                                    norm_feats = F.normalize(e_b[m_b == 0], dim=1)
+                                    anom_feats = F.normalize(e_b[m_b == 1], dim=1)
+
+                                if len(norm_feats) >= 2 and len(anom_feats) >= 1:
+                                    perm_n = torch.randperm(len(norm_feats))[:2]
+                                    perm_a = torch.randint(0, len(anom_feats), (1,))
+                                    anchor = norm_feats[perm_n[0]].unsqueeze(0)
+                                    positive = norm_feats[perm_n[1]].unsqueeze(0)
+                                    negative = anom_feats[perm_a]
+                                    alpha = 1.5
+                                    dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean().item()
+
+                                    # ❗️IMPORTANTE: ora anchor, positive, negative non sono parte del grafo
+                                    triplet_loss = F.triplet_margin_loss(anchor, positive, negative, margin=dynamic_margin, p=2)
+
+                                    with open(triplet_log_file, 'a') as f:
+                                        if write_triplet_header:
+                                            f.write("epoch,margin,triplet_loss\n")
+                                            write_triplet_header = False
+                                        f.write(f"{epoch},{dynamic_margin:.4f},{triplet_loss.item():.4f}\n")
+
+                            # ✅ Loss totale (BG-SPP + triplet)
+                            loss = loss_ml + args.bgspp_lambda * (loss_n_con + loss_a_con) + 0.1 * triplet_loss
+
+                            # Backward e update
                             optimizer.zero_grad()
+                            
+                            
                             loss.backward()
                             optimizer.step()
-                            
-                            loss_item = loss.item()
-                        
-                        if math.isnan(loss_item):
-                            total_loss += 0.0
-                            loss_count += 0
-                        else:
-                            total_loss += loss_item
-                            loss_count += 1
 
-    return
+                            # Verifica aggiornamenti encoder
+                            updated = False
+                            for name, param in encoder.named_parameters():
+                                if param.requires_grad:
+                                    delta = (param.detach() - encoder_weights_before[name]).abs().sum().item()
+                                    if delta > 0:
+                                        print(f"[ENCODER UPDATE] {name}: Δ = {delta:.6f}")
+                                        updated = True
+
+                            if not updated:
+                                print("[WARNING] Nessun parametro dell'encoder è stato aggiornato ❌")
+
+                            loss_item = loss.item()
+                            if math.isnan(loss_item):
+                                total_loss += 0.0
+                                loss_count += 0
+                            else:
+                                total_loss += loss.item()
+                                loss_count += 1
+
         # mean_loss = total_loss / loss_count
         # print('Epoch: {:d}.{:d} \t train loss: {:.4f}, lr={:.6f}'.format(epoch, sub_epoch, mean_loss, lr))
 
 
 def validate(args, epoch, data_loader, encoder, decoders):
-    
-    encoder.eval()
     print('\nCompute loss and scores on category: {}'.format(args.class_name))
 
     decoders = [decoder.eval() for decoder in decoders]
@@ -227,6 +224,7 @@ def validate(args, epoch, data_loader, encoder, decoders):
 
             image = image.to(args.device) # single scale
             features = encoder(image)  # BxCxHxW
+
             for l in range(args.feature_levels):
                 e = features[l]  # BxCxHxW
                 bs, dim, h, w = e.size()
@@ -321,39 +319,59 @@ def validate(args, epoch, data_loader, encoder, decoders):
 
 
 def train(args):
-    # Add a new argument for triplet loss weight
-    if not hasattr(args, 'triplet_lambda'):
-        args.triplet_lambda = 0.1  # default value, can be tuned
-    
     # Feature Extractor
-    encoder = timm.create_model(args.backbone_arch, features_only=True, 
-                out_indices=[i+1 for i in range(args.feature_levels)], pretrained=True)
-    encoder = encoder.to(args.device)
+    #mod 3 start
+   # encoder = timm.create_model(args.backbone_arch, features_only=True, 
+                #out_indices=[i+1 for i in range(args.feature_levels)], pretrained=True)
+    #encoder = encoder.to(args.device).eval()
+    
+    # Crea il modello EfficientNet-B6 con solo i feature map (come prima)
+    encoder = timm.create_model(
+        args.backbone_arch,
+        pretrained=True,
+        features_only=True,
+        out_indices=[i+1 for i in range(args.feature_levels)]
+    ).to(args.device)
 
-    # Get feature dimensions - works across different model architectures
+    encoder.train()  # imposta in modalità training
+
+    # 🔒 Congela tutti i parametri
+    for param in encoder.parameters():
+        param.requires_grad = False
+    # 🔓 Sblocca tutti i moduli chiamati 'blocks' che hanno id >= 6 (fine rete)
+    for name, module in encoder.named_modules():
+        if "blocks" in name and any(x in name for x in ["6", "7", "8"]):
+            print(f"[UNFREEZE] {name}")
+            for param in module.parameters():
+                param.requires_grad = True
+    # Verifica numero di parametri sbloccati
+    n_trainable = sum(p.numel() for p in encoder.parameters() if p.requires_grad)
+    print(f"[INFO] Parametri encoder aggiornabili: {n_trainable}")
+
+    # 🔓 Sblocca solo l'ultimo blocco (più semantico)
+    if hasattr(encoder, 'blocks'):
+        for param in encoder.blocks[-1].parameters():
+            param.requires_grad = True
+    print("[DEBUG] Parametri sbloccati da encoder.blocks[-1]:")
+    for name, param in encoder.blocks[-1].named_parameters():
+        print(f" - {name}: requires_grad={param.requires_grad}, shape={tuple(param.shape)}")
+
+
+    
     feat_dims = encoder.feature_info.channels()
 
     # Normalizing Flows
     decoders = [load_flow_model(args, feat_dim) for feat_dim in feat_dims]
     decoders = [decoder.to(args.device) for decoder in decoders]
-
-    # Collect parameters for optimization
-    params = []
-
-    # Collect trainable parameters from the last two layers of the encoder
-    children_layers = list(encoder.children())
-    if len(children_layers) > 0:
-        # Try to include parameters from the last two layers of the main feature extraction part
-        for layer in children_layers[-2:]:
-            params.extend(layer.parameters())
-
-    # Add all decoder parameters
-    for l in range(args.feature_levels):
-        params.extend(decoders[l].parameters())
-    
+    params = list(decoders[0].parameters())
+    for l in range(1, args.feature_levels):
+        params += list(decoders[l].parameters())
+    #mod 3    
+    encoder_params = [p for p in encoder.parameters() if p.requires_grad]
+    params+=encoder_params
+    #fine mod 3
     # optimizer
     optimizer = torch.optim.Adam(params, lr=args.lr)
-    
     # data loaders
     normal_loader, train_loader, test_loader = create_fas_data_loader(args)
 
