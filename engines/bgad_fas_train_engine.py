@@ -160,6 +160,8 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
 
                                     alpha = 1.5
                                     dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean()  # detach margin only
+                                    dynamic_margin=float(torch.clamp(dynamic_margin, min=0.5, max=2.0).item())  # still a float!
+
                                     triplet_loss = F.triplet_margin_loss(anchor, positive, negative, margin=dynamic_margin, p=2)
 
                                     with open(triplet_log_file, 'a') as f:
