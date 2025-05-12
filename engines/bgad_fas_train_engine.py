@@ -160,7 +160,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
 
                                     alpha = 1.5
                                     dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean()  # detach margin only
-                                    dynamic_margin=float(torch.clamp(dynamic_margin, min=0.5, max=2.0).item())  # still a float!
+                                    dynamic_margin = torch.clamp(dynamic_margin, min=0.5, max=2.0).item()  # converti in float usando .item()
 
                                     triplet_loss = F.triplet_margin_loss(anchor, positive, negative, margin=dynamic_margin, p=2)
 
@@ -168,7 +168,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                                         if write_triplet_header:
                                             f.write("epoch,margin,triplet_loss\n")
                                             write_triplet_header = False
-                                        f.write(f"{epoch},{dynamic_margin.item():.4f},{triplet_loss.item():.4f}\n")
+                                        f.write(f"{epoch},{dynamic_margin:.4f},{triplet_loss.item():.4f}\n")
 
                             # ✅ Loss totale (BG-SPP + triplet)
                             loss = loss_ml + args.bgspp_lambda * (loss_n_con + loss_a_con) + 0.1 * triplet_loss
