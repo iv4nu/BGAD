@@ -159,8 +159,8 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                                     negative = anom_feats[perm_a]
 
                                     alpha = 1.5
-                                    dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean().detach()  # detach margin only
-                                    triplet_loss = F.triplet_margin_loss(anchor, positive, negative, margin=dynamic_margin.item(), p=2)
+                                    dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean()  # detach margin only
+                                    triplet_loss = F.triplet_margin_loss(anchor, positive, negative, margin=dynamic_margin, p=2)
 
                                     with open(triplet_log_file, 'a') as f:
                                         if write_triplet_header:
