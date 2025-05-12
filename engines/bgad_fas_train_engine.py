@@ -24,18 +24,24 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
     N_batch = 4096
     # Change encoder to train mode and require gradients for last layers
     encoder.train()
+    
+    # Freeze all parameters first
     for param in encoder.parameters():
         param.requires_grad = False
     
     # Unfreeze the last two layers of the encoder
-    for layer in encoder.feature_info.get_classifier_channels()[-2:]:
-        for param in layer.parameters():
-            param.requires_grad = True
-    
+    # This approach is more robust and works across different model architectures
+    children_layers = list(encoder.children())
+    if len(children_layers) > 0:
+        # Try to unfreeze the last two layers of the main feature extraction part
+        for layer in children_layers[-2:]:
+            for param in layer.parameters():
+                param.requires_grad = True
+
     decoders = [decoder.train() for decoder in decoders]  # 3
     adjust_learning_rate(args, optimizer, epoch)
     I = len(data_loader)
-    
+
     # CSV log file per triplet loss
     triplet_log_file = os.path.join(args.output_dir, args.exp_name, "triplet_loss_log.csv")
     write_triplet_header = not os.path.exists(triplet_log_file)
@@ -45,7 +51,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
         data_loader = data_loader[0]
     else:
         data_loader = data_loader[1]
-    
+
     for sub_epoch in range(args.sub_epochs):
         total_loss, loss_count = 0.0, 0
         for i, (data) in enumerate(tqdm(data_loader)):
@@ -59,7 +65,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
             image = image.to(args.device)  
             mask = mask.to(args.device)
             
-            # Run encoder and get features (allowing gradient flow for last two layers)
+            # Run encoder and get features
             features = encoder(image)
             
             for l in range(args.feature_levels):
@@ -194,9 +200,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                             total_loss += loss_item
                             loss_count += 1
 
-    # Rest of the function remains the same as in the original script
     return
-
         # mean_loss = total_loss / loss_count
         # print('Epoch: {:d}.{:d} \t train loss: {:.4f}, lr={:.6f}'.format(epoch, sub_epoch, mean_loss, lr))
 
@@ -317,36 +321,39 @@ def validate(args, epoch, data_loader, encoder, decoders):
 
 
 def train(args):
-    
-        # Add a new argument for triplet loss weight
+    # Add a new argument for triplet loss weight
     if not hasattr(args, 'triplet_lambda'):
         args.triplet_lambda = 0.1  # default value, can be tuned
-    # Feature Extractor
+    
     # Feature Extractor
     encoder = timm.create_model(args.backbone_arch, features_only=True, 
                 out_indices=[i+1 for i in range(args.feature_levels)], pretrained=True)
     encoder = encoder.to(args.device)
-    
+
+    # Get feature dimensions - works across different model architectures
     feat_dims = encoder.feature_info.channels()
 
     # Normalizing Flows
     decoders = [load_flow_model(args, feat_dim) for feat_dim in feat_dims]
     decoders = [decoder.to(args.device) for decoder in decoders]
-    
+
     # Collect parameters for optimization
     params = []
-    
-    # Add last two encoder layers to trainable parameters
-    for layer in encoder.feature_info.get_classifier_channels()[-2:]:
-        params.extend(layer.parameters())
-    
+
+    # Collect trainable parameters from the last two layers of the encoder
+    children_layers = list(encoder.children())
+    if len(children_layers) > 0:
+        # Try to include parameters from the last two layers of the main feature extraction part
+        for layer in children_layers[-2:]:
+            params.extend(layer.parameters())
+
     # Add all decoder parameters
     for l in range(args.feature_levels):
         params.extend(decoders[l].parameters())
-        
-
+    
     # optimizer
     optimizer = torch.optim.Adam(params, lr=args.lr)
+    
     # data loaders
     normal_loader, train_loader, test_loader = create_fas_data_loader(args)
 
