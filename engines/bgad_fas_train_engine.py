@@ -142,15 +142,14 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
 
                             # === Calcolo loss principale ===
                             loss = loss_ml + args.bgspp_lambda * (loss_n_con + loss_a_con)
-                            
-                           # === Calcolo loss completa + Triplet ===
+
+
+                                                        # === Calcolo triplet loss ===
                             triplet_loss = torch.tensor(0.0, device=args.device)
 
-                            # ➕ TRIPLET LOSS nello stesso grafo computazionale (senza errore)
                             if l == args.feature_levels - 1:
-                                with torch.no_grad():
-                                    norm_feats = F.normalize(e_b[m_b == 0], dim=1)
-                                    anom_feats = F.normalize(e_b[m_b == 1], dim=1)
+                                norm_feats = F.normalize(e_b[m_b == 0], dim=1)
+                                anom_feats = F.normalize(e_b[m_b == 1], dim=1)
 
                                 if len(norm_feats) >= 2 and len(anom_feats) >= 1:
                                     perm_n = torch.randperm(len(norm_feats))[:2]
@@ -158,17 +157,16 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                                     anchor = norm_feats[perm_n[0]].unsqueeze(0)
                                     positive = norm_feats[perm_n[1]].unsqueeze(0)
                                     negative = anom_feats[perm_a]
-                                    alpha = 1.5
-                                    dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean().item()
 
-                                    # ❗️IMPORTANTE: ora anchor, positive, negative non sono parte del grafo
-                                    triplet_loss = F.triplet_margin_loss(anchor, positive, negative, margin=dynamic_margin, p=2)
+                                    alpha = 1.5
+                                    dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean().detach()  # detach margin only
+                                    triplet_loss = F.triplet_margin_loss(anchor, positive, negative, margin=dynamic_margin.item(), p=2)
 
                                     with open(triplet_log_file, 'a') as f:
                                         if write_triplet_header:
                                             f.write("epoch,margin,triplet_loss\n")
                                             write_triplet_header = False
-                                        f.write(f"{epoch},{dynamic_margin:.4f},{triplet_loss.item():.4f}\n")
+                                        f.write(f"{epoch},{dynamic_margin.item():.4f},{triplet_loss.item():.4f}\n")
 
                             # ✅ Loss totale (BG-SPP + triplet)
                             loss = loss_ml + args.bgspp_lambda * (loss_n_con + loss_a_con) + 0.1 * triplet_loss
