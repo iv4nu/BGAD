@@ -22,21 +22,30 @@ log_theta = torch.nn.LogSigmoid()
 
 def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
     N_batch = 4096
+    # Change encoder to train mode and require gradients for last layers
+    encoder.train()
+    for param in encoder.parameters():
+        param.requires_grad = False
+    
+    # Unfreeze the last two layers of the encoder
+    for layer in encoder.feature_info.get_classifier_channels()[-2:]:
+        for param in layer.parameters():
+            param.requires_grad = True
+    
     decoders = [decoder.train() for decoder in decoders]  # 3
     adjust_learning_rate(args, optimizer, epoch)
     I = len(data_loader)
     
-    #mod3
-     # CSV log file per triplet loss
+    # CSV log file per triplet loss
     triplet_log_file = os.path.join(args.output_dir, args.exp_name, "triplet_loss_log.csv")
     write_triplet_header = not os.path.exists(triplet_log_file)
-#mod3 stop
 
     # First epoch only training on normal samples to keep training steadily
     if epoch == 0:
         data_loader = data_loader[0]
     else:
         data_loader = data_loader[1]
+    
     for sub_epoch in range(args.sub_epochs):
         total_loss, loss_count = 0.0, 0
         for i, (data) in enumerate(tqdm(data_loader)):
@@ -49,16 +58,19 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                 image, _, mask = data
             image = image.to(args.device)  
             mask = mask.to(args.device)
-            with torch.no_grad():
-                features = encoder(image)
+            
+            # Run encoder and get features (allowing gradient flow for last two layers)
+            features = encoder(image)
+            
             for l in range(args.feature_levels):
-                e = features[l].detach()  
+                e = features[l]  
                 bs, dim, h, w = e.size()
                 mask_ = F.interpolate(mask, size=(h, w), mode='nearest').squeeze(1)
                 mask_ = mask_.reshape(-1)
                 e = e.permute(0, 2, 3, 1).reshape(-1, dim)
 
-                # ---- Triplet Loss Analitica SOLO livello finale ----
+                # ---- Triplet Loss for Final Level ----
+                triplet_loss = torch.tensor(0.0).to(args.device)
                 if l == args.feature_levels - 1:
                     norm_feats = F.normalize(e[mask_ == 0], dim=1)
                     anom_feats = F.normalize(e[mask_ == 1], dim=1)
@@ -68,9 +80,14 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                         anchor = norm_feats[perm_n[0]].unsqueeze(0)
                         positive = norm_feats[perm_n[1]].unsqueeze(0)
                         negative = anom_feats[perm_a]
+                        
                         alpha = 1.5
                         dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean()
-                        triplet_loss = F.triplet_margin_loss(anchor, positive, negative, margin=dynamic_margin.item(), p=2)
+                        triplet_loss = F.triplet_margin_loss(anchor, positive, negative, 
+                                                             margin=dynamic_margin.item(), 
+                                                             p=2)
+                        
+                        # Log triplet loss details
                         print(f"[Triplet - Epoch {epoch}] margin: {dynamic_margin.item():.4f}, loss: {triplet_loss.item():.4f}")
                         with open(triplet_log_file, 'a') as f:
                             if write_triplet_header:
@@ -78,7 +95,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                                 write_triplet_header = False
                             f.write(f"{epoch},{dynamic_margin.item():.4f},{triplet_loss.item():.4f}\n")
 
-                # (bs, 128, h, w)
+                # Positional embedding
                 pos_embed = positionalencoding2d(args.pos_embed_dim, h, w).to(args.device).unsqueeze(0).repeat(bs, 1, 1, 1)
                 pos_embed = pos_embed.permute(0, 2, 3, 1).reshape(-1, args.pos_embed_dim)
                 decoder = decoders[l]
@@ -90,6 +107,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                     p_b = pos_embed[perm[idx]]  
                     e_b = e[perm[idx]]  
                     m_b = mask_[perm[idx]]  
+                    
                     if args.flow_arch == 'flow_model':
                         z, log_jac_det = decoder(e_b)  
                     else:
@@ -108,6 +126,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                             total_loss += loss.item()
                             loss_count += 1
                     else:
+                        # Compute main loss
                         if m_b.sum() == 0:  # only normal ml loss
                             logps = get_logp(dim, z, log_jac_det)  
                             logps = logps / dim
@@ -117,6 +136,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                                 loss = loss.mean()
                             else:
                                 loss = -log_theta(logps).mean()
+                        
                         if m_b.sum() > 0:  # normal ml loss and bg_sppc loss
                             logps = get_logp(dim, z, log_jac_det)  
                             logps = logps / dim 
@@ -129,39 +149,61 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                                 weights = nor_weights.new_zeros(logps_detach.shape)
                                 weights[m_b == 0] = nor_weights
                                 weights[m_b == 1] = ano_weights
-                                loss_ml = -log_theta(logps[m_b == 0]) * nor_weights # (256, )
+                                loss_ml = -log_theta(logps[m_b == 0]) * nor_weights
                                 loss_ml = torch.mean(loss_ml)
                             else:
                                 loss_ml = -log_theta(logps[m_b == 0])
                                 loss_ml = torch.mean(loss_ml)
 
-                           # boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=True,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
-                            boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=False,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
-                            #print('feature level: {}, pos_beta: {}, boudaris: {}'.format(l, args.pos_beta, boundaries))
+                            # Compute boundary loss
+                            boundaries = get_logp_boundary(logps, m_b, margin_tau=args.margin_tau, 
+                                                           normalizer=args.normalizer, adaptive=False, 
+                                                           epoch=epoch, warmup_epochs=7)
+                            
                             if args.focal_weighting:
-                                loss_n_con, loss_a_con = calculate_bg_spp_loss(logps, m_b, boundaries, args.normalizer, weights=weights)
+                                loss_n_con, loss_a_con = calculate_bg_spp_loss(logps, m_b, boundaries, 
+                                                                                args.normalizer, weights=weights)
                             else:
-                                loss_n_con, loss_a_con = calculate_bg_spp_loss(logps, m_b, boundaries, args.normalizer)
+                                loss_n_con, loss_a_con = calculate_bg_spp_loss(logps, m_b, boundaries, 
+                                                                                args.normalizer)
 
-
+                            # Combine losses
                             loss = loss_ml + args.bgspp_lambda * (loss_n_con + loss_a_con)
+                        
+                        # Add triplet loss only to the encoder for final levels
+                        # Modify the loss computation and backward pass to include triplet loss
+                        if l >= args.feature_levels - 2:  # last two levels of encoder
+                            total_loss_with_triplet = loss + args.triplet_lambda * triplet_loss
 
-                        optimizer.zero_grad()
-                        loss.backward()
-                        optimizer.step()
-                        loss_item = loss.item()
+                            optimizer.zero_grad()
+                            total_loss_with_triplet.backward()
+                            optimizer.step()
+                            
+                            loss_item = total_loss_with_triplet.item()
+                        else:
+                            optimizer.zero_grad()
+                            loss.backward()
+                            optimizer.step()
+                            
+                            loss_item = loss.item()
+                        
                         if math.isnan(loss_item):
                             total_loss += 0.0
                             loss_count += 0
                         else:
-                            total_loss += loss.item()
+                            total_loss += loss_item
                             loss_count += 1
+
+    # Rest of the function remains the same as in the original script
+    return
 
         # mean_loss = total_loss / loss_count
         # print('Epoch: {:d}.{:d} \t train loss: {:.4f}, lr={:.6f}'.format(epoch, sub_epoch, mean_loss, lr))
 
 
 def validate(args, epoch, data_loader, encoder, decoders):
+    
+    encoder.eval()
     print('\nCompute loss and scores on category: {}'.format(args.class_name))
 
     decoders = [decoder.eval() for decoder in decoders]
@@ -275,18 +317,34 @@ def validate(args, epoch, data_loader, encoder, decoders):
 
 
 def train(args):
+    
+        # Add a new argument for triplet loss weight
+    if not hasattr(args, 'triplet_lambda'):
+        args.triplet_lambda = 0.1  # default value, can be tuned
+    # Feature Extractor
     # Feature Extractor
     encoder = timm.create_model(args.backbone_arch, features_only=True, 
                 out_indices=[i+1 for i in range(args.feature_levels)], pretrained=True)
-    encoder = encoder.to(args.device).eval()
+    encoder = encoder.to(args.device)
+    
     feat_dims = encoder.feature_info.channels()
 
     # Normalizing Flows
     decoders = [load_flow_model(args, feat_dim) for feat_dim in feat_dims]
     decoders = [decoder.to(args.device) for decoder in decoders]
-    params = list(decoders[0].parameters())
-    for l in range(1, args.feature_levels):
-        params += list(decoders[l].parameters())
+    
+    # Collect parameters for optimization
+    params = []
+    
+    # Add last two encoder layers to trainable parameters
+    for layer in encoder.feature_info.get_classifier_channels()[-2:]:
+        params.extend(layer.parameters())
+    
+    # Add all decoder parameters
+    for l in range(args.feature_levels):
+        params.extend(decoders[l].parameters())
+        
+
     # optimizer
     optimizer = torch.optim.Adam(params, lr=args.lr)
     # data loaders
