@@ -148,8 +148,9 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer,opti
                             triplet_loss = torch.tensor(0.0, device=args.device)
 
                             if l == args.feature_levels - 1:
-                                norm_feats = F.normalize(e_b[m_b == 0], dim=1)
-                                anom_feats = F.normalize(e_b[m_b == 1], dim=1)
+                                norm_feats = F.normalize(e_b[m_b == 0].detach().clone().requires_grad_(True), dim=1)
+                                anom_feats = F.normalize(e_b[m_b == 1].detach().clone().requires_grad_(True), dim=1)
+
 
                                 if len(norm_feats) >= 2 and len(anom_feats) >= 1:
                                     perm_n = torch.randperm(len(norm_feats))[:2]
