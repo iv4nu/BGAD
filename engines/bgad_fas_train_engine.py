@@ -20,7 +20,7 @@ from sklearn.metrics import precision_score, recall_score
 log_theta = torch.nn.LogSigmoid()
 
 
-def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
+def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer,optimizer_enc):
     N_batch = 4096
     encoder.train() #mod 3
     decoders = [decoder.train() for decoder in decoders]  # 3
@@ -140,7 +140,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                                 loss_n_con, loss_a_con = calculate_bg_spp_loss(logps, m_b, boundaries, args.normalizer)
 
 
-                            # === Calcolo loss principale ===
+                            
                             loss = loss_ml + args.bgspp_lambda * (loss_n_con + loss_a_con)
 
 
@@ -170,8 +170,10 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                                             write_triplet_header = False
                                         f.write(f"{epoch},{dynamic_margin:.4f},{triplet_loss.item():.4f}\n")
 
-                            # ✅ Loss totale (BG-SPP + triplet)
-                            loss = loss_ml + args.bgspp_lambda * (loss_n_con + loss_a_con) + 0.1 * triplet_loss
+                            
+                            loss = loss_ml + args.bgspp_lambda * (loss_n_con + loss_a_con)
+                            loss_encoder = triplet_loss if triplet_loss.requires_grad else torch.tensor(0.0, device=args.device)#mod 3
+
 
                             # Backward e update
                             optimizer.zero_grad()
@@ -179,6 +181,12 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                             
                             loss.backward()
                             optimizer.step()
+                            
+                            # Backward encoder SOLO se c'è triplet_loss
+                            if loss_encoder.requires_grad and loss_encoder != 0:
+                                optimizer_enc.zero_grad()
+                                loss_encoder.backward()
+                                optimizer_enc.step()
 
                             # Verifica aggiornamenti encoder
                             updated = False
@@ -367,11 +375,14 @@ def train(args):
     for l in range(1, args.feature_levels):
         params += list(decoders[l].parameters())
     #mod 3    
-    encoder_params = [p for p in encoder.parameters() if p.requires_grad]
-    params+=encoder_params
+    
+    
     #fine mod 3
     # optimizer
     optimizer = torch.optim.Adam(params, lr=args.lr)
+    encoder_params = [p for p in encoder.parameters() if p.requires_grad]
+    optimizer_enc = torch.optim.Adam(encoder_params, lr=args.lr)
+
     # data loaders
     normal_loader, train_loader, test_loader = create_fas_data_loader(args)
 
@@ -397,7 +408,7 @@ def train(args):
             load_weights(encoder, decoders, args.checkpoint)
 
         print('Train meta epoch: {}'.format(epoch))
-        train_meta_epoch(args, epoch, [normal_loader, train_loader], encoder, decoders, optimizer)
+        train_meta_epoch(args, epoch, [normal_loader, train_loader], encoder, decoders, optimizer,optimizer_enc)
 
         img_auc, pix_auc, pix_pro = validate(args, epoch, test_loader, encoder, decoders)
 
