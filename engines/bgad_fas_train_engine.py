@@ -179,7 +179,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer,opti
                             optimizer.zero_grad()
                             
                             
-                            loss.backward()
+                            loss.backward(retain_graph=True)
                             optimizer.step()
                             
                             # Backward encoder SOLO se c'è triplet_loss
