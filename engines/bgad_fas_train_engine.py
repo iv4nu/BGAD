@@ -22,7 +22,7 @@ import torchvision.transforms.functional as TF
 from PIL import Image
 
 log_theta = torch.nn.LogSigmoid()
-args.save_results=True
+
 
 def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
     N_batch = 4096
