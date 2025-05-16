@@ -259,6 +259,8 @@ def validate(args, epoch, data_loader, encoder, decoders):
     args.pro = False
     if args.pro:
         pix_pro = calculate_pro_metric(scores, gt_mask)
+    
+    args.vis = True  # forza visualizzazione solo nel test finale (facoltativo)
 
     if args.vis and epoch == args.meta_epochs - 1:
         img_threshold, pix_threshold = evaluate_thresholds(gt_label, gt_mask, img_scores, scores)
@@ -372,3 +374,16 @@ def train(args):
     if args.save_results:
         save_results(img_auc_obs, pix_auc_obs, pix_pro_obs, args.output_dir, args.exp_name, args.model_path, args.class_name)
         save_weights(encoder, decoders, args.output_dir, args.exp_name, args.model_path)
+        
+        # === Validazione finale su test set ===
+    
+    print("\n[Post-Training Evaluation] Eseguo validazione finale sul test set...")
+    test_loader = create_test_data_loader(args)  # solo il test loader
+    encoder.eval()
+    decoders = [decoder.eval() for decoder in decoders]
+
+    img_auc, pix_auc, pix_pro = validate(args, args.meta_epochs - 1, test_loader, encoder, decoders)
+
+    print(f"[FINAL] {args.class_name} Image AUC: {img_auc * 100:.2f}")
+    print(f"[FINAL] {args.class_name} Pixel AUC: {pix_auc * 100:.2f}")
+    print(f"[FINAL] {args.class_name} Pixel PRO: {pix_pro * 100:.2f}")
