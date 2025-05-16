@@ -87,6 +87,8 @@ def parse_args():
                         help='name of the run (default: 0)')
     parser.add_argument('--checkpoint', default='', type=str, metavar='D',
                         help='used in test phase, set same with the exp_name')
+    parser.add_argument('--model_path', default='final.pth', type=str, help='nome file modello da salvare')
+
     
     # misc hyperparamters
     parser.add_argument("--phase", default='train', type=str, metavar='T',
