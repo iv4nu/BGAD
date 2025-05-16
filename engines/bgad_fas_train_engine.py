@@ -208,7 +208,7 @@ def validate(args, epoch, data_loader, encoder, decoders):
                 loss_count += 1
                 logps_list[l].append(logps.reshape(bs, h, w))
                 
-                if args.vis and epoch == args.meta_epochs - 1 and l == args.feature_levels - 1:
+                ''' if args.vis and epoch == args.meta_epochs - 1 and l == args.feature_levels - 1:
                     
                     save_dir = os.path.join(args.output_dir, args.exp_name, "vis_heatmaps")
                     os.makedirs(save_dir, exist_ok=True)
@@ -237,7 +237,7 @@ def validate(args, epoch, data_loader, encoder, decoders):
 
                         count_saved += 1
                         if count_saved >= 3:
-                            break
+                            break'''
 
     mean_loss = total_loss / loss_count
     print('Epoch: {:d} \t test_loss: {:.4f}'.format(epoch, mean_loss))
