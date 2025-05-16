@@ -100,3 +100,14 @@ def test(args):
     print('{} Pixel PRO: {}'.format(args.class_name, pix_pro * 100))
     
     return img_auc, pix_auc, pix_pro
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    
+
+    args = parser.parse_args()
+
+    test(args)

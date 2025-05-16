@@ -97,7 +97,7 @@ def parse_args():
                         help='print frequency (default: 2)')                    
     parser.add_argument('--pro', action='store_true', default=False,
                         help='enables estimation of AUPRO metric')
-    parser.add_argument('--vis', action='store_true', default=False,
+    parser.add_argument('--vis', action='store_true', default=True,
                         help='test data visualizations')
     parser.add_argument('--with_fas', action='store_true', default=True,
                         help='Wether to train with few abnormal samples (default: True)')

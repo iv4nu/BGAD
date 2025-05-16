@@ -75,7 +75,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                         alpha = 1.5
                         dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean()
                         triplet_loss = F.triplet_margin_loss(anchor, positive, negative, margin=dynamic_margin.item(), p=2)
-                        print(f"[Triplet - Epoch {epoch}] margin: {dynamic_margin.item():.4f}, loss: {triplet_loss.item():.4f}")
+                        #print(f"[Triplet - Epoch {epoch}] margin: {dynamic_margin.item():.4f}, loss: {triplet_loss.item():.4f}")
                         with open(triplet_log_file, 'a') as f:
                             if write_triplet_header:
                                 f.write("epoch,margin,triplet_loss\n")
