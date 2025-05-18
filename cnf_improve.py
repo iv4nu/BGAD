@@ -44,7 +44,6 @@ def main():
     args.pos_beta = 0.05
     args.data_strategy = '0,1'
     args.num_anomalies = 5
-    args.meta_epochs=2
     
     args.crop_size = (args.inp_size, args.inp_size)
     args.img_size = (args.inp_size, args.inp_size)
