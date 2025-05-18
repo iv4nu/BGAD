@@ -22,6 +22,9 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
     adjust_learning_rate(args, optimizer, epoch)
     I = len(data_loader)
 
+    triplet_log_file = os.path.join(args.output_dir, args.exp_name, "triplet_loss_log.csv")
+    write_triplet_header = not os.path.exists(triplet_log_file)
+
     for sub_epoch in range(args.sub_epochs):
         total_loss, loss_count = 0.0, 0
         for i, (data) in enumerate(tqdm(data_loader)):

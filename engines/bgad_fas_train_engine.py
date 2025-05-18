@@ -139,7 +139,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                                 loss_ml = -log_theta(logps[m_b == 0])
                                 loss_ml = torch.mean(loss_ml)
 
-                            boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=True,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
+                           # boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=True,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
                            # boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=True,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
                             boundaries = get_logp_boundary(logps,m_b,margin_tau=args.margin_tau,normalizer=args.normalizer,adaptive=False,epoch=epoch,warmup_epochs=7)  # oppure args.warmup_epochs se definito
                             #print('feature level: {}, pos_beta: {}, boudaris: {}'.format(l, args.pos_beta, boundaries))
@@ -256,7 +256,7 @@ def validate(args, epoch, data_loader, encoder, decoders):
 
     #pix_auc = -1
     pix_pro = -1
-    args.pro = False
+    args.pro = True
     if args.pro:
         pix_pro = calculate_pro_metric(scores, gt_mask)
     
@@ -328,7 +328,7 @@ def train(args):
     # optimizer
     optimizer = torch.optim.Adam(params, lr=args.lr)
     # data loaders
-    normal_loader, train_loader, test_loader = create_fas_data_loader(args)
+    normal_loader, train_loader, test_loader = create_fas_data_loader(args) 
 
     # stats
     img_auc_obs = MetricRecorder('IMG_AUROC')
@@ -378,7 +378,7 @@ def train(args):
         # === Validazione finale su test set ===
     
     print("\n[Post-Training Evaluation] Eseguo validazione finale sul test set...")
-    test_loader = create_test_data_loader(args)  # solo il test loader
+    #solo il test loader che già lo restituisce create_fas_data_loader
     encoder.eval()
     decoders = [decoder.eval() for decoder in decoders]
 
