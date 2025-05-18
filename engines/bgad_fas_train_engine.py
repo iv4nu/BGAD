@@ -387,3 +387,5 @@ def train(args):
     print(f"[FINAL] {args.class_name} Image AUC: {img_auc * 100:.2f}")
     print(f"[FINAL] {args.class_name} Pixel AUC: {pix_auc * 100:.2f}")
     print(f"[FINAL] {args.class_name} Pixel PRO: {pix_pro * 100:.2f}")
+    
+    return img_auc, pix_auc, pix_pro
