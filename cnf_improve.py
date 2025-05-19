@@ -70,23 +70,23 @@ def main():
 
     optimizer = torch.optim.Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr, weight_decay=1e-4)
 
-    for epoch in range(args.meta_epochs):
-        print(f"\n[Epoch {epoch}] Training...")
-        img_auc, pix_auc, _ = train(args)
-
-        if img_auc > best_score:
-            best_score = img_auc
-            best_epoch = epoch
-            stop_counter = 0
-        else:
-            stop_counter += 1
+    #for epoch in range(args.meta_epochs):
+     #   print(f"\n[Epoch {epoch}] Training...")
+    img_auc, pix_auc, _ = train(args)
+'''
+    if img_auc > best_score:
+        best_score = img_auc
+        best_epoch = epoch
+        stop_counter = 0
+    else:
+        stop_counter += 1
 
         print(f"[EarlyStopping] img_auc: {img_auc:.2f}, best: {best_score:.2f} @ epoch {best_epoch}, counter: {stop_counter}/{patience}")
 
         if stop_counter >= patience:
             print("[EarlyStopping] Fermata anticipata del training.")
-            break
-
+            
+'''
 
 if __name__ == '__main__':
     main()
