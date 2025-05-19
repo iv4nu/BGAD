@@ -7,7 +7,7 @@ from tqdm import tqdm
 import torch.nn.functional as F
 from sklearn.metrics import roc_auc_score
 from utils import t2np, get_logp, adjust_learning_rate, warmup_learning_rate, save_results, save_weights, load_weights
-from datasets import create_data_loader
+from datasets import create_data_loader,create_test_data_loader
 from models import positionalencoding2d, load_flow_model
 from losses import get_logp_boundary, calculate_bg_spp_loss_normal, normal_fl_weighting
 from utils.visualizer import plot_visualizing_results
@@ -195,6 +195,18 @@ def train(args):
     img_auc_obs = MetricRecorder('IMG_AUROC')
     pix_auc_obs = MetricRecorder('PIX_AUROC')
     pix_pro_obs = MetricRecorder('PIX_AUPRO')
+    
+    # Creo il dizionario per tenere traccia delle metriche
+    metrics_history = {
+        'epochs': [],
+        'img_auroc': [],
+        'pix_auroc': [],
+        'pix_pro': []
+    }
+    # Creo la directory per i log se non esiste
+    log_dir = os.path.join(args.output_dir, args.exp_name, 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+    
     for epoch in range(args.meta_epochs):
         if args.checkpoint:
             load_weights(encoder, decoders, args.checkpoint)
@@ -208,8 +220,45 @@ def train(args):
         pix_auc_obs.update(100.0 * pix_auc, epoch)
         pix_pro_obs.update(100.0 * pix_pro, epoch)
         
+        # Aggiungo le metriche al dizionario
+        metrics_history['epochs'].append(epoch)
+        metrics_history['img_auroc'].append(float(100.0 * img_auc))
+        metrics_history['pix_auroc'].append(float(100.0 * pix_auc))
+        metrics_history['pix_pro'].append(float(100.0 * pix_pro))
+        
+        # Salvo il file JSON ad ogni epoca
+        log_file = os.path.join(log_dir, f'{args.class_name}_metrics.json')
+        with open(log_file, 'w') as f:
+            json.dump(metrics_history, f, indent=4)
+        
     if args.save_results:
         save_results(img_auc_obs, pix_auc_obs, pix_pro_obs, args.output_dir, args.exp_name, args.model_path, args.class_name)
         save_weights(encoder, decoders, args.output_dir, args.exp_name, args.model_path)  # avoid unnecessary saves
+
+        # === Validazione finale su test set ===
+    
+    print("\n[Post-Training Evaluation] Eseguo validazione finale sul test set...")
+    #solo il test loader che già lo restituisce create_fas_data_loader
+    encoder.eval()
+    decoders = [decoder.eval() for decoder in decoders]
+
+    img_auc, pix_auc, pix_pro = validate(args, args.meta_epochs - 1, test_loader, encoder, decoders)
+
+    print(f"[FINAL] {args.class_name} Image AUC: {img_auc * 100:.2f}")
+    print(f"[FINAL] {args.class_name} Pixel AUC: {pix_auc * 100:.2f}")
+    print(f"[FINAL] {args.class_name} Pixel PRO: {pix_pro * 100:.2f}")
+    
+    print("\n[ 2 Post-Training Evaluation] Eseguo validazione finale sul test set...")
+    #solo il test loader che già lo restituisce create_fas_data_loader
+    encoder.eval()
+    decoders = [decoder.eval() for decoder in decoders]
+
+    test_loader=create_test_data_loader()
+    img_auc, pix_auc, pix_pro = validate(args, args.meta_epochs - 1, test_loader, encoder, decoders)
+
+    print(f"[FINAL] {args.class_name} Image AUC: {img_auc * 100:.2f}")
+    print(f"[FINAL] {args.class_name} Pixel AUC: {pix_auc * 100:.2f}")
+    print(f"[FINAL] {args.class_name} Pixel PRO: {pix_pro * 100:.2f}")
+    
 
     return img_auc_obs.max_score, pix_auc_obs.max_score, pix_pro_obs.max_score
