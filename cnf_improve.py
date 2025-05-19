@@ -39,7 +39,7 @@ def main():
 
 
     # Override parametri
-    args.class_name = 'bottle'
+    args.class_name = 'cable'
     args.flow_arch = 'conditional_flow_model'
     args.margin_tau = 0.1
     args.pos_beta = 0.05

@@ -169,6 +169,7 @@ def validate(args, epoch, data_loader, encoder, decoders):
     pix_auc = roc_auc_score(gt_mask.flatten(), scores.flatten())
 
     pix_pro = -1
+    args.pro=True
     if args.pro:
         pix_pro = calculate_pro_metric(scores, gt_mask)
     
@@ -229,6 +230,7 @@ def validate2(args, data_loader, encoder, decoders):
     pix_auc = roc_auc_score(gt_mask.flatten(), scores.flatten())
 
     pix_pro = -1
+    args.pro=True
     if args.pro:
         pix_pro = calculate_pro_metric(scores, gt_mask)
     
@@ -311,7 +313,7 @@ def train(args):
     decoders = [decoder.eval() for decoder in decoders]
 
     test_loader=create_test_data_loader(args)
-    img_auc, pix_auc, pix_pro = validate2(args, test_loader, encoder, decoders)
+    img_auc, pix_auc, pix_pro = validate(args, test_loader, encoder, decoders)
 
     print(f"[FINAL] {args.class_name} Image AUC: {img_auc * 100:.2f}")
     print(f"[FINAL] {args.class_name} Pixel AUC: {pix_auc * 100:.2f}")
