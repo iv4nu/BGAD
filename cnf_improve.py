@@ -66,10 +66,10 @@ def main():
     normal_loader, train_loader, test_loader = create_fas_data_loader(args)
     #normal_loader, train_loader = create_data_loader(args)
 
-    encoder = torch.hub.load('rwightman/gen-efficientnet-pytorch', args.backbone_arch, pretrained=True).cuda()
-    decoder = build_optimized_flow_model(input_dim=2048, cond_dim=args.pos_embed_dim).cuda()
+    #encoder = torch.hub.load('rwightman/gen-efficientnet-pytorch', args.backbone_arch, pretrained=True).cuda()
+    #decoder = build_optimized_flow_model(input_dim=2048, cond_dim=args.pos_embed_dim).cuda()
 
-    optimizer = torch.optim.Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr, weight_decay=1e-4)
+    #optimizer = torch.optim.Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=args.lr, weight_decay=1e-4)
 
     #for epoch in range(args.meta_epochs):
      #   print(f"\n[Epoch {epoch}] Training...")
