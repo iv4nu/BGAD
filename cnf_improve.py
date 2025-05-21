@@ -4,8 +4,8 @@ import os
 import FrEIA.framework as Ff
 import FrEIA.modules as Fm
 from main import parse_args
-#from engines.bgad_fas_train_engine import train
-from engines.bgad_train_engine import train
+from engines.bgad_fas_train_engine import train
+#from engines.bgad_train_engine import train
 from datasets import create_fas_data_loader,create_data_loader
 
 
@@ -63,8 +63,8 @@ def main():
     best_epoch = 0
     stop_counter = 0
 
-    #normal_loader, train_loader, test_loader = create_fas_data_loader(args)
-    normal_loader, train_loader = create_data_loader(args)
+    normal_loader, train_loader, test_loader = create_fas_data_loader(args)
+    #normal_loader, train_loader = create_data_loader(args)
 
     encoder = torch.hub.load('rwightman/gen-efficientnet-pytorch', args.backbone_arch, pretrained=True).cuda()
     decoder = build_optimized_flow_model(input_dim=2048, cond_dim=args.pos_embed_dim).cuda()
