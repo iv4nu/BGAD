@@ -17,7 +17,7 @@ def flow_model(args, in_channels):
     return coder
 
 
-def conditional_flow_model(args, in_channels):
+'''def conditional_flow_model(args, in_channels):
     coder = Ff.SequenceINN(in_channels)
     print('Conditional Normalizing Flow => Feature Dimension: ', in_channels)
     for k in range(args.coupling_layers):  # 8
@@ -28,10 +28,10 @@ def conditional_flow_model(args, in_channels):
 ''' 
 def conditional_flow_model(args, in_channels):
     return build_optimized_flow_model(args,in_channels)
-'''
+
 def build_optimized_flow_model(args,input_dim):
     flow = Ff.SequenceINN(input_dim)
-    for _ in range(4):
+    for _ in range(8):
         flow.append(
             Fm.AllInOneBlock,
             cond=0,
