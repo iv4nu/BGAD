@@ -44,7 +44,7 @@ def abnormal_fl_weighting(logps, gamma=2, alpha=0.53, normalizer=10):
 
     return weights
 
-
+'''
 def get_logp_boundary(logps, mask, pos_beta=0.05, margin_tau=0.1, normalizer=10):
     """
     Find the equivalent log-likelihood decision boundaries from normal log-likelihood distribution.
@@ -65,9 +65,9 @@ def get_logp_boundary(logps, mask, pos_beta=0.05, margin_tau=0.1, normalizer=10)
     b_a = b_n - margin_tau  # abnormal boundary
 
     return b_n, b_a
-
-#Proviamo il pos_beta adattivo
 '''
+#Proviamo il pos_beta adattivo
+
 def get_logp_boundary(
     logps,
     mask,
@@ -122,7 +122,7 @@ def get_logp_boundary(
     b_n = b_n / normalizer
     b_a = b_n - margin_tau
     return b_n, b_a
-'''
+
 
 def calculate_bg_spp_loss(logps, mask, boundaries, normalizer=10, weights=None):
     """
