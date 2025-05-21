@@ -17,18 +17,18 @@ def flow_model(args, in_channels):
     return coder
 
 
-'''def conditional_flow_model(args, in_channels):
+def conditional_flow_model(args, in_channels):
     coder = Ff.SequenceINN(in_channels)
     print('Conditional Normalizing Flow => Feature Dimension: ', in_channels)
     for k in range(args.coupling_layers):  # 8
         coder.append(Fm.AllInOneBlock, cond=0, cond_shape=(args.pos_embed_dim,), subnet_constructor=subnet_fc, affine_clamping=args.clamp_alpha,
             global_affine_type='SOFTPLUS', permute_soft=True)
-    return coder'''
+    return coder
     
-    
+''' 
 def conditional_flow_model(args, in_channels):
     return build_optimized_flow_model(args,in_channels)
-
+'''
 def build_optimized_flow_model(args,input_dim):
     flow = Ff.SequenceINN(input_dim)
     for _ in range(4):

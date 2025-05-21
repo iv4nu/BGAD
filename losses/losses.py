@@ -68,6 +68,7 @@ def get_logp_boundary(logps, mask, pos_beta=0.05, margin_tau=0.1, normalizer=10)
 '''
 #Proviamo il pos_beta adattivo
 
+'''
 def get_logp_boundary(
     logps,
     mask,
@@ -123,7 +124,7 @@ def get_logp_boundary(
     b_a = b_n - margin_tau
     return b_n, b_a
 
-
+'''
 def calculate_bg_spp_loss(logps, mask, boundaries, normalizer=10, weights=None):
     """
     Calculate boudary guided semi-push-pull contrastive loss.
