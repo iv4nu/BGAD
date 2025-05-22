@@ -347,6 +347,7 @@ def train(args):
     os.makedirs(log_dir, exist_ok=True)
 
     for epoch in range(args.meta_epochs):
+        args.current_epoch = epoch  # ⬅️ Per Relazione
         if args.checkpoint:
             load_weights(encoder, decoders, args.checkpoint)
 
