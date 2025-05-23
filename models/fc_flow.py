@@ -8,7 +8,7 @@ import os
 '''
 def subnet_fc(dims_in, dims_out):
     return nn.Sequential(nn.Linear(dims_in, 2*dims_in), nn.ReLU(), nn.Linear(2*dims_in, dims_out))
-
+'''
 
 def flow_model(args, in_channels):
     coder = Ff.SequenceINN(in_channels)
@@ -18,7 +18,7 @@ def flow_model(args, in_channels):
             global_affine_type='SOFTPLUS', permute_soft=True)
     return coder
 
-
+'''
 def conditional_flow_model(args, in_channels):
     coder = Ff.SequenceINN(in_channels)
     print('Conditional Normalizing Flow => Feature Dimension: ', in_channels)
