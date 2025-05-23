@@ -55,6 +55,7 @@ def subnet_fc(dims_in, dims_out, layer_id=None, args=None):
 
     return layers
 def conditional_flow_model(args, in_channels):
+    print('ok')
     coder = Ff.SequenceINN(in_channels)
     print('Conditional Normalizing Flow => Feature Dimension: ', in_channels)
     for k in range(args.coupling_layers):  # 8
