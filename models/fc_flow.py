@@ -39,7 +39,7 @@ def save_activation_histogram(tensor, epoch, layer_id, save_dir='/kaggle/working
     plt.grid(True)
     plt.savefig(os.path.join(save_dir, f"epoch{epoch}_layer{layer_id}.png"))
     plt.close()
-
+'''
 def subnet_fc(dims_in, dims_out, layer_id=None, args=None):
     layers = nn.Sequential(
         nn.Linear(dims_in, 2 * dims_in),
@@ -54,6 +54,26 @@ def subnet_fc(dims_in, dims_out, layer_id=None, args=None):
         layers[1].register_forward_hook(hook)  # 👈 hook sulla ReLU
 
     return layers
+'''
+#Subnet potenziata
+def subnet_fc(dims_in, dims_out, layer_id=None, args=None):
+    layers = nn.Sequential(
+                nn.Linear(dims_in, 256),
+                nn.LeakyReLU(),
+                nn.Linear(256, 256),
+                nn.LeakyReLU(),
+                nn.Linear(256, dims_out)
+            )
+    if args is not None and layer_id is not None:
+        def hook(module, input, output):
+            if hasattr(args, 'current_epoch'):
+                save_activation_histogram(output, args.current_epoch, layer_id)
+        layers[1].register_forward_hook(hook)  # 👈 hook sulla ReLU
+
+    return layers
+
+
+
 def conditional_flow_model(args, in_channels):
     print('ok')
     coder = Ff.SequenceINN(in_channels)
@@ -86,5 +106,11 @@ def build_optimized_flow_model(args,input_dim):
             global_affine_type='SOFTPLUS',
             permute_soft=True
         )
+        if args is not None and layer_id is not None:
+        def hook(module, input, output):
+            if hasattr(args, 'current_epoch'):
+                save_activation_histogram(output, args.current_epoch, layer_id)
+        layers[1].register_forward_hook(hook)  # 👈 hook sulla ReLU
+
     return flow'''
 
