@@ -147,7 +147,7 @@ class MultiScaleNormalizingFlows(nn.Module):
                         adaptive_subnet_fc(in_dim, out_dim, cf),
                     affine_clamping=args.clamp_alpha if hasattr(args, 'clamp_alpha') else 1.9,
                     global_affine_type='SOFTPLUS',
-                    permute_soft=True
+                    permute_soft=False
                 )
             
             self.flows[scale_name] = flow
@@ -176,32 +176,60 @@ class MultiScaleNormalizingFlows(nn.Module):
     def forward(self, multi_scale_features, condition=None):
         """
         Forward pass attraverso tutti i flows
+        Gestisce sia input dict (multi-scale) che tensor singolo (backward compatibility)
         """
         scale_outputs = {}
         log_likelihoods = {}
         
-        # Processa ogni scala
-        for scale_name in self.scales:
-            if scale_name in multi_scale_features:
-                features = multi_scale_features[scale_name]
+        # Controlla se l'input è un tensor singolo (backward compatibility)
+        if isinstance(multi_scale_features, torch.Tensor):
+            # Modalità backward compatibility: usa solo il flow 'global'
+            if 'global' in self.flows:
+                features = multi_scale_features
                 
-                # Forward attraverso il flow di questa scala
                 if condition is not None:
-                    z, log_jac_det = self.flows[scale_name](features, c=condition)
+                    z, log_jac_det = self.flows['global'](features, c=condition)
                 else:
-                    z, log_jac_det = self.flows[scale_name](features)
+                    z, log_jac_det = self.flows['global'](features)
                 
                 # Calcola log-likelihood
-                log_prob_z = -0.5 * torch.sum(z**2, dim=1)  # Standard normal prior
+                log_prob_z = -0.5 * torch.sum(z**2, dim=1)
                 log_likelihood = log_prob_z + log_jac_det
                 
-                scale_outputs[scale_name] = z
-                log_likelihoods[scale_name] = log_likelihood
+                scale_outputs['global'] = z
+                log_likelihoods['global'] = log_likelihood
+                
+                return log_likelihood, log_likelihoods, scale_outputs
+            else:
+                raise ValueError("Single tensor input provided but no 'global' flow available")
         
-        # Fusion delle log-likelihoods
-        fused_likelihood = self._fuse_likelihoods(log_likelihoods)
+        # Input è un dizionario (modalità multi-scale)
+        elif isinstance(multi_scale_features, dict):
+            # Processa ogni scala
+            for scale_name in self.scales:
+                if scale_name in multi_scale_features:
+                    features = multi_scale_features[scale_name]
+                    
+                    # Forward attraverso il flow di questa scala
+                    if condition is not None:
+                        z, log_jac_det = self.flows[scale_name](features, c=condition)
+                    else:
+                        z, log_jac_det = self.flows[scale_name](features)
+                    
+                    # Calcola log-likelihood
+                    log_prob_z = -0.5 * torch.sum(z**2, dim=1)  # Standard normal prior
+                    log_likelihood = log_prob_z + log_jac_det
+                    
+                    scale_outputs[scale_name] = z
+                    log_likelihoods[scale_name] = log_likelihood
+            
+            # Fusion delle log-likelihoods
+            fused_likelihood = self._fuse_likelihoods(log_likelihoods)
+            
+            return fused_likelihood, log_likelihoods, scale_outputs
         
-        return fused_likelihood, log_likelihoods, scale_outputs
+        else:
+            raise TypeError(f"multi_scale_features must be either torch.Tensor or dict, got {type(multi_scale_features)}")
     
     def _fuse_likelihoods(self, log_likelihoods):
         """
@@ -293,28 +321,75 @@ class MultiScaleBGAD(nn.Module):
         """Cleanup resources"""
         self.feature_extractor.cleanup_hooks()
 
+class BackwardCompatibleMultiScaleFlow(nn.Module):
+    """
+    Wrapper che fornisce piena backward compatibility
+    Si comporta esattamente come il flow originale quando riceve tensor singoli
+    """
+    def __init__(self, args, in_channels):
+        super().__init__()
+        self.args = args
+        self.use_multi_scale = getattr(args, 'use_multi_scale', False)
+        
+        if True:
+            # Sistema multi-scale
+            feature_dims = {
+                'low_level': getattr(args, 'low_level_dim', 512),
+                'mid_level': getattr(args, 'mid_level_dim', 1024), 
+                'high_level': getattr(args, 'high_level_dim', 1536),
+                'global': in_channels
+            }
+            self.flow = MultiScaleNormalizingFlows(args, feature_dims)
+        # else:
+        #     # Sistema originale
+        #     self.flow = build_optimized_flow_model(args, in_channels)
+    
+    def forward(self, x, c=None, rev=False):
+        """
+        Interfaccia compatibile con il sistema originale
+        x: tensor o dict
+        c: condition tensor
+        rev: reverse mode (per generazione)
+        """
+        if self.use_multi_scale:
+            if rev:
+                # Reverse mode per multi-scale
+                if isinstance(x, dict):
+                    return self.flow.reverse(x, condition=c)
+                else:
+                    # Se x è un tensor singolo, trattalo come 'global'
+                    z_dict = {'global': x}
+                    result = self.flow.reverse(z_dict, condition=c)
+                    return result['global'], torch.zeros(x.shape[0])  # dummy jacobian
+            else:
+                # Forward mode
+                fused_likelihood, scale_likelihoods, scale_outputs = self.flow(x, condition=c)
+                
+                # Per backward compatibility, restituisci nel formato originale
+                if isinstance(x, torch.Tensor):
+                    # Input era tensor singolo, restituisci come il sistema originale
+                    return scale_outputs['global'], fused_likelihood
+                else:
+                    # Input era dict, restituisci formato esteso
+                    return fused_likelihood, scale_likelihoods, scale_outputs
+        else:
+            # Sistema originale - passa tutto direttamente
+            return self.flow(x, c=c, rev=rev)
+
 # Factory function per creare il modello (compatibile con il tuo codice esistente)
 def conditional_flow_model(args, in_channels):
     """
     Wrapper per mantenere compatibilità con il codice esistente
-    Se args ha multi_scale=True, usa il nuovo sistema, altrimenti fallback al sistema originale
     """
-    args.use_multi_scale = True
-    if True: #getattr(args, 'use_multi_scale', False):
-        # Definisci le dimensioni per ogni scala (dovrai adattare questi valori)
-        feature_dims = {
-            'low_level': getattr(args, 'low_level_dim', 512),
-            'mid_level': getattr(args, 'mid_level_dim', 1024), 
-            'high_level': getattr(args, 'high_level_dim', 1536),
-            'global': in_channels  # Dimensione originale
-        }
-        
-        print("Using Multi-Scale Normalizing Flows")
-        return MultiScaleNormalizingFlows(args, feature_dims)
-    else:
-        # Fallback al sistema originale
-        print("Using Original Single-Scale Flow")
-        
+    print(f"Creating flow model - Multi-scale: {getattr(args, 'use_multi_scale', False)}")
+    return BackwardCompatibleMultiScaleFlow(args, in_channels)
+
+def flow_model(args, in_channels):
+    """
+    Wrapper per mantenere compatibilità con il codice esistente
+    """
+    print(f"Creating flow model - Multi-scale: {getattr(args, 'use_multi_scale', False)}")
+    return BackwardCompatibleMultiScaleFlow(args, in_channels)
 
 def build_optimized_flow_model(args, input_dim):
     """Mantiene il tuo sistema originale ottimizzato"""
@@ -333,30 +408,9 @@ def build_optimized_flow_model(args, input_dim):
             ),
             affine_clamping=1.9,
             global_affine_type='SOFTPLUS',
-            permute_soft=True
+            permute_soft=False
         )
     return flow
-
-##FITTIZIO!!!!!!!!!!!!!!!!!
-def flow_model(args, in_channels):
-    """
-    Wrapper per mantenere compatibilità con il codice esistente
-    Se args ha multi_scale=True, usa il nuovo sistema, altrimenti fallback al sistema originale
-    """
-    if True:#getattr(args, 'use_multi_scale', False):
-        # Definisci le dimensioni per ogni scala (dovrai adattare questi valori)
-        feature_dims = {
-            'low_level': getattr(args, 'low_level_dim', 512),
-            'mid_level': getattr(args, 'mid_level_dim', 1024), 
-            'high_level': getattr(args, 'high_level_dim', 1536),
-            'global': in_channels  # Dimensione originale
-        }
-        
-        print("Using Multi-Scale Normalizing Flows")
-        return MultiScaleNormalizingFlows(args, feature_dims)
-    else:
-        print("Using Original Single-Scale Flow")
-
 
 # Utility per configurazione semplificata
 def setup_multiscale_args(args, enable_multiscale=True):
