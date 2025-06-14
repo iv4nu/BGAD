@@ -79,6 +79,8 @@ def parse_args():
                         help='number of meta epochs to train (default: 25)')
     parser.add_argument('--sub_epochs', type=int, default=8, metavar='N',
                         help='number of sub epochs to train (default: 8)')
+    parser.add_argument('--use_multi_scale', action='store_true', default=True,
+                        help='Wether to use multi-scale normalizing flows (default: True)')
 
     # saving hyperparamters
     parser.add_argument('--output_dir', default='output', type=str, metavar='C',
