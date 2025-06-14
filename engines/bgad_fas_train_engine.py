@@ -20,6 +20,7 @@ import matplotlib.cm as cm
 from torchvision.utils import save_image
 import torchvision.transforms.functional as TF
 from PIL import Image
+from engines.monitoring import analyze_neural_activity,extract_sample_features
 
 log_theta = torch.nn.LogSigmoid()
 
@@ -370,6 +371,21 @@ def train(args):
         log_file = os.path.join(log_dir, f'{args.class_name}_metrics.json')
         with open(log_file, 'w') as f:
             json.dump(metrics_history, f, indent=4)
+        # 🆕 ANALISI NEURALE OGNI 5 EPOCHE
+        if epoch % 5 == 0 or epoch == args.meta_epochs - 1:
+            print(f"\n[NEURAL ANALYSIS] Analyzing neural activity at epoch {epoch}...")
+            try:
+                # Estrai features di esempio per l'analisi
+                sample_features = extract_sample_features(args, encoder, test_loader, n_samples=64)
+                
+                # Analizza l'attività neurale
+                analyze_neural_activity(decoders, sample_features, epoch,args.output_dir, args.exp_name, args.device)
+                
+                print(f"[NEURAL ANALYSIS] Neural activity analysis saved for epoch {epoch}")
+            except Exception as e:
+                print(f"[NEURAL ANALYSIS] Error during neural analysis: {e}")
+    
+    
     
     if args.save_results:
         save_results(img_auc_obs, pix_auc_obs, pix_pro_obs, args.output_dir, args.exp_name, args.model_path, args.class_name)
