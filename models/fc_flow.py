@@ -336,6 +336,30 @@ def build_optimized_flow_model(args, input_dim):
         )
     return flow
 
+##FITTIZIO!!!!!!!!!!!!!!!!!
+def flow_model(args, in_channels):
+    """
+    Wrapper per mantenere compatibilità con il codice esistente
+    Se args ha multi_scale=True, usa il nuovo sistema, altrimenti fallback al sistema originale
+    """
+    if getattr(args, 'use_multi_scale', False):
+        # Definisci le dimensioni per ogni scala (dovrai adattare questi valori)
+        feature_dims = {
+            'low_level': getattr(args, 'low_level_dim', 512),
+            'mid_level': getattr(args, 'mid_level_dim', 1024), 
+            'high_level': getattr(args, 'high_level_dim', 1536),
+            'global': in_channels  # Dimensione originale
+        }
+        
+        print("Using Multi-Scale Normalizing Flows")
+        return MultiScaleNormalizingFlows(args, feature_dims)
+    else:
+        # Fallback al sistema originale
+        print("Using Original Single-Scale Flow")
+        return build_optimized_flow_model(args, in_channels)
+
+
+
 # Utility per configurazione semplificata
 def setup_multiscale_args(args, enable_multiscale=True):
     """
