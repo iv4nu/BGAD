@@ -256,7 +256,8 @@ def validate(args, epoch, data_loader, encoder, decoders):
 
     #pix_auc = -1
     pix_pro = -1
-    args.pro =False
+
+    args.pro =True
     if args.pro:
         pix_pro = calculate_pro_metric(scores, gt_mask)
     
