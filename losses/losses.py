@@ -96,9 +96,10 @@ def get_logp_boundary(
     """
     normal_logps = logps[mask == 0].detach()
 
-    use_adaptive = adaptive and (epoch > warmup_epochs-1)
+    use_adaptive = adaptive
+    print("ci sono")
     
-    if use_adaptive:
+    if True:
         best_eps = pos_beta
         best_gap = -np.inf
         for eps in np.linspace(min_eps, max_eps, n_steps):
@@ -111,7 +112,7 @@ def get_logp_boundary(
             if gap > best_gap:
                 best_gap = gap
                 best_eps = eps
-                #print(f"nuovo epsilon trovato pari a: {eps}")
+                print(f"nuovo epsilon trovato pari a: {eps}")
         pos_beta = best_eps
         print(f"[Epoch {epoch}] Best beta = {best_eps:.3f}, Best gap = {best_gap:.4f}")
         fixed_threshold = np.percentile(t2np(normal_logps), 5.0)
