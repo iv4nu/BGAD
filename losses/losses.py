@@ -44,7 +44,7 @@ def abnormal_fl_weighting(logps, gamma=2, alpha=0.53, normalizer=10):
 
     return weights
 
-
+''' 
 def get_logp_boundary(logps, mask, pos_beta=0.05, margin_tau=0.1, normalizer=10):
     """
     Find the equivalent log-likelihood decision boundaries from normal log-likelihood distribution.
@@ -79,7 +79,7 @@ def get_logp_boundary(
     max_eps=0.1,
     n_steps=10,
     epoch=None,
-    warmup_epochs=5
+    warmup_epochs=3
 ):
     """
     Adaptive or fixed boundary from normal log-likelihoods.
@@ -113,6 +113,13 @@ def get_logp_boundary(
                 best_eps = eps
                 #print(f"nuovo epsilon trovato pari a: {eps}")
         pos_beta = best_eps
+        print(f"[Epoch {epoch}] Best beta = {best_eps:.3f}, Best gap = {best_gap:.4f}")
+        fixed_threshold = np.percentile(t2np(normal_logps), 5.0)
+        inside_fixed = normal_logps[normal_logps >= fixed_threshold]
+        outside_fixed = normal_logps[normal_logps < fixed_threshold]
+        gap_fixed = torch.min(inside_fixed) - torch.max(outside_fixed)
+        print(f"[Epoch {epoch}] Gap beta=0.05 = {gap_fixed:.4f}")
+
 
     # Calcolo soglia finale
     n_idx = int(((mask == 0).sum() * pos_beta).item())
@@ -121,8 +128,9 @@ def get_logp_boundary(
     b_n = normal_logps[n_idx]
     b_n = b_n / normalizer
     b_a = b_n - margin_tau
+    
     return b_n, b_a
-'''
+
 def calculate_bg_spp_loss(logps, mask, boundaries, normalizer=10, weights=None):
     """
     Calculate boudary guided semi-push-pull contrastive loss.
