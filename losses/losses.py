@@ -78,7 +78,7 @@ def get_logp_boundary(
     min_eps=0.01,
     max_eps=0.1,
     n_steps=10,
-    epoch=None,
+    epoch=0,
     warmup_epochs=3
 ):
     """
