@@ -96,7 +96,7 @@ def get_logp_boundary(
     """
     normal_logps = logps[mask == 0].detach()
 
-    use_adaptive = adaptive and (epoch >= warmup_epochs)
+    use_adaptive = adaptive and (epoch > warmup_epochs-1)
     
     if use_adaptive:
         best_eps = pos_beta
