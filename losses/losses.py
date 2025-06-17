@@ -114,7 +114,7 @@ def get_logp_boundary(
                 best_eps = eps
                 
         pos_beta = best_eps
-        print(f"[Epoch {epoch}] Best beta = {best_eps:.3f}, Best gap = {best_gap:.4f}")
+        #print(f"[Epoch {epoch}] Best beta = {best_eps:.3f}, Best gap = {best_gap:.4f}")
         fixed_threshold = np.percentile(t2np(normal_logps), 5.0)
         inside_fixed = normal_logps[normal_logps >= fixed_threshold]
         outside_fixed = normal_logps[normal_logps < fixed_threshold]
