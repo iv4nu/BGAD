@@ -75,7 +75,7 @@ def parse_args():
                         help='cosine learning rate schedular (default: True)')
     parser.add_argument('--temp', type=float, default=0.5, metavar='LR',
                         help='temp of cosine learning rate schedular (default: 0.5)')                    
-    parser.add_argument('--meta_epochs', type=int, default=10, metavar='N',
+    parser.add_argument('--meta_epochs', type=int, default=25, metavar='N',
                         help='number of meta epochs to train (default: 25)')
     parser.add_argument('--sub_epochs', type=int, default=8, metavar='N',
                         help='number of sub epochs to train (default: 8)')
