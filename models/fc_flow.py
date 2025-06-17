@@ -10,7 +10,7 @@ def subnet_fc(dims_in, dims_out, layer_id=None, args=None):
                 nn.LeakyReLU(),
                 nn.Linear(256, 256),
                 nn.LeakyReLU(),
-                nn.Linear(256, out_dim)
+                nn.Linear(256, dims_out)
             )
     return layers
 
