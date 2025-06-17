@@ -21,7 +21,7 @@ from torchvision.utils import save_image
 import torchvision.transforms.functional as TF
 from PIL import Image
 from engines.monitoring import analyze_neural_activity,extract_sample_features
-from encoder_train import finetune_encoder_wrapper
+#from encoder_train import finetune_encoder_wrapper
 
 log_theta = torch.nn.LogSigmoid()
 
