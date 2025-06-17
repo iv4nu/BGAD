@@ -5,6 +5,8 @@ import torch
 import json
 import csv
 import numpy as np
+from pathlib import Path
+from collections import defaultdict
 from tqdm import tqdm
 import torch.nn.functional as F
 from sklearn.metrics import roc_auc_score
@@ -40,7 +42,7 @@ def analyze_neural_activity(args, decoders, sample_features, epoch, output_dir, 
     """
     
     # Crea directory per salvare le analisi neurali
-    neural_dir = "/kaggle/working/BGAD/neuralAnal"
+    neural_dir = Path(output_dir) / exp_name / "neural_analysis"
     neural_dir.mkdir(parents=True, exist_ok=True)
     
     # Directory specifica per questa epoca
