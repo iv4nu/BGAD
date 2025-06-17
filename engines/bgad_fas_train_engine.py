@@ -21,7 +21,7 @@ from torchvision.utils import save_image
 import torchvision.transforms.functional as TF
 from PIL import Image
 from engines.monitoring import analyze_neural_activity,extract_sample_features
-#from encoder_train import finetune_encoder_wrapper
+from .encoder_train import finetune_encoder_wrapper
 
 log_theta = torch.nn.LogSigmoid()
 
@@ -320,10 +320,10 @@ def train(args):
                 out_indices=[i+1 for i in range(args.feature_levels)], pretrained=True)
     
     #blocco precedente { 
-    encoder = encoder.to(args.device).eval()
-    feat_dims = encoder.feature_info.channels()
+    #encoder = encoder.to(args.device).eval()
+    #feat_dims = encoder.feature_info.channels()
 #}
-    '''#blocco aggiornato { 
+    #blocco aggiornato { 
       # data loaders (li creiamo prima per il fine-tuning)
     normal_loader, train_loader, test_loader = create_fas_data_loader(args) 
     

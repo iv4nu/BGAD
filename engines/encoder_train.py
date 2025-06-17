@@ -182,7 +182,12 @@ class EncoderFineTuner:
             encoder: Encoder fine-tuned e in modalità eval
         """
         print(f"[FINETUNE] Starting encoder fine-tuning for {self.finetune_epochs} epochs")
-        
+        csv_path = os.path.join(args.output_dir, args.exp_name, 'loss_encoder.csv')
+        write_header = not os.path.exists(csv_path)
+        csv_file = open(csv_path, 'a')
+        if write_header:
+            csv_file.write("epoch,triplet_loss\n")
+
         # Prepara l'encoder per il fine-tuning
         encoder.train()
         self._freeze_early_layers(encoder)
