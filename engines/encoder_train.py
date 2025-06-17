@@ -294,7 +294,7 @@ def finetune_encoder_wrapper(args, encoder, train_loader, test_loader=None):
     if False:#not getattr(args, 'enable_encoder_finetune', False):
         print("[FINETUNE] Encoder fine-tuning disabled. Returning original encoder.")
         return encoder
-    
+    encoder = encoder.to(args.device)
     # Crea il fine-tuner
     fine_tuner = EncoderFineTuner(args)
     
