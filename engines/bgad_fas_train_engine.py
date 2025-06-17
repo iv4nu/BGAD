@@ -373,14 +373,14 @@ def train(args):
         with open(log_file, 'w') as f:
             json.dump(metrics_history, f, indent=4)
         # 🆕 ANALISI NEURALE OGNI 5 EPOCHE
-        if epoch % 5 == 0 or epoch == args.meta_epochs - 1:
+        if epoch % 2 == 0 or epoch == args.meta_epochs - 1:
             print(f"\n[NEURAL ANALYSIS] Analyzing neural activity at epoch {epoch}...")
             try:
                 # Estrai features di esempio per l'analisi
                 sample_features = extract_sample_features(args, encoder, test_loader, n_samples=64)
                 
                 # Analizza l'attività neurale
-                analyze_neural_activity(decoders, sample_features, epoch,args.output_dir, args.exp_name, args.device)
+                analyze_neural_activity(args,decoders, sample_features, epoch,args.output_dir, args.exp_name, args.device)
                 
                 print(f"[NEURAL ANALYSIS] Neural activity analysis saved for epoch {epoch}")
             except Exception as e:
