@@ -4,7 +4,13 @@ import FrEIA.framework as Ff
 import FrEIA.modules as Fm
 
 
-def subnet_fc(dims_in, dims_out, layer_id=None, args=None):
+
+
+def subnet_fc(dims_in, dims_out):
+    return nn.Sequential(nn.Linear(dims_in, 2*dims_in), nn.ReLU(), nn.Linear(2*dims_in, dims_out))
+
+
+'''def subnet_fc(dims_in, dims_out, layer_id=None, args=None):
     layers = nn.Sequential(
                 nn.Linear(dims_in, 256),
                 nn.LeakyReLU(),
@@ -12,13 +18,13 @@ def subnet_fc(dims_in, dims_out, layer_id=None, args=None):
                 nn.LeakyReLU(),
                 nn.Linear(256, dims_out)
             )
-    return layers
+    return layers'''
 
 def flow_model(args, in_channels):
     coder = Ff.SequenceINN(in_channels)
-    print('Normalizing Flow => Feature Dimension: ', in_channels)
-    for k in range(args.coupling_layers):
-        coder.append(Fm.AllInOneBlock, subnet_constructor=subnet_fc, affine_clamping=args.clamp_alpha,
+    print('Conditional Normalizing Flow => Feature Dimension: ', in_channels)
+    for k in range(args.coupling_layers):  # 8
+        coder.append(Fm.AllInOneBlock, cond=0, cond_shape=(args.pos_embed_dim,), subnet_constructor=subnet_fc, affine_clamping=args.clamp_alpha,
             global_affine_type='SOFTPLUS', permute_soft=True)
     return coder
 
