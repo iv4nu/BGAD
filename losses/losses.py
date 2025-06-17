@@ -119,7 +119,7 @@ def get_logp_boundary(
         inside_fixed = normal_logps[normal_logps >= fixed_threshold]
         outside_fixed = normal_logps[normal_logps < fixed_threshold]
         gap_fixed = torch.min(inside_fixed) - torch.max(outside_fixed)
-        print(f"[Epoch {epoch}] Gap beta=0.05 = {gap_fixed:.4f}")
+        #print(f"[Epoch {epoch}] Gap beta=0.05 = {gap_fixed:.4f}")
 
 
     # Calcolo soglia finale
