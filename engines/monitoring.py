@@ -40,7 +40,7 @@ def analyze_neural_activity(args, decoders, sample_features, epoch, output_dir, 
     """
     
     # Crea directory per salvare le analisi neurali
-    neural_dir = Path(output_dir) / exp_name / "neural_analysis"
+    neural_dir = "/kaggle/working/BGAD/neuralAnal"
     neural_dir.mkdir(parents=True, exist_ok=True)
     
     # Directory specifica per questa epoca

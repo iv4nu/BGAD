@@ -373,7 +373,7 @@ def train(args):
         with open(log_file, 'w') as f:
             json.dump(metrics_history, f, indent=4)
         # 🆕 ANALISI NEURALE OGNI 5 EPOCHE
-        if epoch % 2 == 0 or epoch == args.meta_epochs - 1:
+        if True:#epoch % 2 == 0 or epoch == args.meta_epochs - 1:
             print(f"\n[NEURAL ANALYSIS] Analyzing neural activity at epoch {epoch}...")
             try:
                 # Estrai features di esempio per l'analisi
