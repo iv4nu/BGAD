@@ -85,7 +85,7 @@ class EncoderFineTuner:
         if len(normal_features) < 2 or len(anomaly_features) < 1:
             return torch.tensor(0.0, device=self.device), 0.0
 
-        n_triplets = min(64, len(normal_features) // 2)
+        n_triplets = min(128, len(normal_features) // 2)
         total_loss = 0.0
         total_margin = 0.0
 
