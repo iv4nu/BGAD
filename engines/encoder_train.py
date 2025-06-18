@@ -20,11 +20,11 @@ class EncoderFineTuner:
         
         # Parametri di fine-tuning
         self.finetune_epochs = getattr(args, 'finetune_epochs', 10)
-        self.finetune_lr = getattr(args, 'finetune_lr', 5e-6)
-        self.triplet_margin_alpha = getattr(args, 'triplet_margin_alpha', 0.5)
-        self.gradient_clip_norm = getattr(args, 'gradient_clip_norm', 0.5)
+        self.finetune_lr = getattr(args, 'finetune_lr', 1e-5)
+        self.triplet_margin_alpha = getattr(args, 'triplet_margin_alpha', 1.5)
+        self.gradient_clip_norm = getattr(args, 'gradient_clip_norm', 1.0)
         self.freeze_early_layers = getattr(args, 'freeze_early_layers', True)
-        self.freeze_ratio = getattr(args, 'freeze_ratio', 0.7)  # Congela il 50% dei primi layer
+        self.freeze_ratio = getattr(args, 'freeze_ratio', 0.3)  # Congela il 50% dei primi layer
         
         # Logging
         self.log_file = os.path.join(args.output_dir, args.exp_name, "encoder_finetune_log.csv")
@@ -59,7 +59,7 @@ class EncoderFineTuner:
     
     def _compute_triplet_loss(self, features, masks):
         """
-        Calcola la triplet loss con margin adattivo
+        Calcola la triplet loss con margin adattivo e hard negative mining
         
         Args:
             features: Feature estratte dall'encoder
@@ -68,80 +68,55 @@ class EncoderFineTuner:
         Returns:
             triplet_loss, margin_value
         """
-        # Usa solo l'ultimo livello di feature per la triplet loss
         final_features = features[-1]  # Ultimo livello
         bs, dim, h, w = final_features.size()
         
-        # Ridimensiona mask e features
         mask_resized = F.interpolate(masks, size=(h, w), mode='nearest').squeeze(1)
         mask_flat = mask_resized.reshape(-1)
         features_flat = final_features.permute(0, 2, 3, 1).reshape(-1, dim)
         
-        # Normalizza le features
+        # Normalizzazione opzionale
         features_norm = F.normalize(features_flat, dim=1)
-        
-        # Separa features normali e anomale
+        # features_norm = features_flat  # Uncommenta questa per disabilitare normalizzazione
+
         normal_features = features_norm[mask_flat == 0]
         anomaly_features = features_norm[mask_flat == 1]
-        
+
         if len(normal_features) < 2 or len(anomaly_features) < 1:
             return torch.tensor(0.0, device=self.device), 0.0
-        
-        # 🆕 MINING INTELLIGENTE DEI TRIPLET
-        # Calcola matrice delle distanze per trovare hard negatives
-        normal_dists = torch.cdist(normal_features, normal_features)
-        cross_dists = torch.cdist(normal_features, anomaly_features)
-        
+
+        n_triplets = min(64, len(normal_features) // 2)
         total_loss = 0.0
-        valid_triplets = 0
-        
-        # Per ogni anchor normale, trova il positive più difficile e negative più facile
-        for i in range(min(32, len(normal_features))):  # Riduci il numero di anchor
-            anchor = normal_features[i].unsqueeze(0)
-            
-            # Hard positive: normale più distante dall'anchor (escluso se stesso)
-            pos_dists = normal_dists[i]
-            pos_dists[i] = -float('inf')  # Escludi se stesso
-            hard_pos_idx = torch.argmax(pos_dists)
-            positive = normal_features[hard_pos_idx].unsqueeze(0)
-            
-            # Semi-hard negative: anomalo più vicino all'anchor ma più lontano del positive
-            neg_dists = cross_dists[i]
-            pos_dist = pos_dists[hard_pos_idx]
-            
-            # Trova negativi che sono più vicini del positive (semi-hard)
-            semi_hard_mask = neg_dists < pos_dist
-            if semi_hard_mask.any():
-                semi_hard_indices = torch.where(semi_hard_mask)[0]
-                neg_idx = semi_hard_indices[torch.randint(0, len(semi_hard_indices), (1,))]
-            else:
-                # Se non ci sono semi-hard, prendi il più vicino
-                neg_idx = torch.argmin(neg_dists)
-            
-            negative = anomaly_features[neg_idx].unsqueeze(0)
-            
-            # Margin adattivo più conservativo
-            anchor_pos_dist = F.pairwise_distance(anchor, positive)
-            anchor_neg_dist = F.pairwise_distance(anchor, negative)
-            
-            # Margin basato sulla differenza delle distanze
-            dynamic_margin = 0.1 + 0.5 * torch.clamp(anchor_neg_dist - anchor_pos_dist, min=0.0)
-            
-            # Calcola loss solo se ha senso
-            if anchor_neg_dist > anchor_pos_dist:
-                triplet_loss = F.triplet_margin_loss(
-                    anchor, positive, negative,
-                    margin=dynamic_margin.item(),
-                    p=2, reduction='mean'
-                )
-                total_loss += triplet_loss
-                valid_triplets += 1
-        
-        if valid_triplets > 0:
-            return total_loss / valid_triplets, dynamic_margin.item()
-        else:
-            return torch.tensor(0.0, device=self.device), 0.0
-    
+        total_margin = 0.0
+
+        for _ in range(n_triplets):
+            # Anchor e positive da normali
+            normal_indices = torch.randperm(len(normal_features))[:2]
+            anchor = normal_features[normal_indices[0]].unsqueeze(0)
+            positive = normal_features[normal_indices[1]].unsqueeze(0)
+
+            # HARD NEGATIVE MINING: anomalia più vicina all'anchor
+            dists = torch.cdist(anchor, anomaly_features, p=2).squeeze(0)
+            closest_idx = torch.argmin(dists)
+            negative = anomaly_features[closest_idx].unsqueeze(0)
+
+            # Margin dinamico
+            anchor_positive_dist = F.pairwise_distance(anchor, positive)
+            dynamic_margin = self.triplet_margin_alpha * anchor_positive_dist.mean()
+
+            triplet_loss = F.triplet_margin_loss(
+                anchor, positive, negative,
+                margin=dynamic_margin.item(),
+                p=2, reduction='mean'
+            )
+
+            total_loss += triplet_loss
+            total_margin += dynamic_margin.item()
+
+        avg_loss = total_loss / n_triplets if n_triplets > 0 else torch.tensor(0.0, device=self.device)
+        avg_margin = total_margin / n_triplets if n_triplets > 0 else 0.0
+
+        return avg_loss, avg_margin
     def _validate_encoder(self, encoder, test_loader):
         """
         Validazione rapida dell'encoder fine-tuned
