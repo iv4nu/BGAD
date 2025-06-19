@@ -8,8 +8,14 @@ def finetune_encoder_wrapper(args, encoder, train_loader, test_loader=None):
     """
     Fine-tune the encoder using TripletMarginLoss with hard negative mining.
     Only the last 50% of the layers are trained.
+    
     """
     encoder = encoder.to(args.device)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    finetune_lr = 1e-5
+    triplet_margin = 1.0
+    finetune_epochs = 10
+    gradient_clip_norm = 1.0
 
     # Freeze first 50% of layers
     all_params = list(encoder.named_parameters())
