@@ -28,7 +28,7 @@ def finetune_encoder_wrapper(args, encoder, train_loader, test_loader=None):
     # Optimizer
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, encoder.parameters()),
-        lr=args.finetune_lr
+        lr=finetune_lr
     )
 
     # Fixed LR scheduler (no decay during early FT)
@@ -39,11 +39,11 @@ def finetune_encoder_wrapper(args, encoder, train_loader, test_loader=None):
     triplet_criterion = nn.TripletMarginLoss(margin=triplet_margin, p=2, reduction='mean')
 
     encoder.train()
-    for epoch in range(args.finetune_epochs):
+    for epoch in range(finetune_epochs):
         total_loss = 0.0
         valid_batches = 0
 
-        for batch in tqdm(train_loader, desc=f"FT Epoch {epoch+1}/{args.finetune_epochs}"):
+        for batch in tqdm(train_loader, desc=f"FT Epoch {epoch+1}/{finetune_epochs}"):
             images, _, masks = batch[:3]
             images = images.to(args.device)
             masks = masks.to(args.device)
@@ -72,7 +72,7 @@ def finetune_encoder_wrapper(args, encoder, train_loader, test_loader=None):
             loss = triplet_criterion(anchor, positive, negative)
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(encoder.parameters(), args.gradient_clip_norm)
+            torch.nn.utils.clip_grad_norm_(encoder.parameters(),gradient_clip_norm)
             optimizer.step()
 
             total_loss += loss.item()
