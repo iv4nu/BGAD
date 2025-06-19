@@ -39,7 +39,7 @@ def main():
 
 
     # Override parametri
-    args.class_name = 'wood'
+    args.class_name = 'pill'
     args.flow_arch = 'conditional_flow_model'
     args.margin_tau = 0.1
     args.pos_beta = 0.05
