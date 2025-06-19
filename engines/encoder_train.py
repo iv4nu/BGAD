@@ -6,15 +6,15 @@ from tqdm import tqdm
 
 def finetune_encoder_wrapper(args, encoder, train_loader, test_loader=None):
     """
-    Fine-tune the encoder using TripletMarginLoss with hard negative mining.
+    Fine-tune the encoder using TripletMarginLoss with stabilized hard negative mining.
     Only the last 50% of the layers are trained.
-    Includes stabilizing strategies to promote decreasing loss.
+    Includes variance-reducing strategies to encourage consistent loss decrease.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    finetune_lr = 1e-4
-    triplet_margin = 1.2
+    finetune_lr = 5e-4
+    triplet_margin = 1.0
     finetune_epochs = 10
-    gradient_clip_norm = 1.0
+    gradient_clip_norm = 0.5
 
     encoder = encoder.to(device)
 
@@ -29,11 +29,11 @@ def finetune_encoder_wrapper(args, encoder, train_loader, test_loader=None):
     # Optimizer
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, encoder.parameters()),
-        lr=finetune_lr
+        lr=finetune_lr, weight_decay=1e-4
     )
 
-    # Scheduler (linear warmup then step decay)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
+    # Scheduler
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=finetune_epochs, eta_min=1e-6)
 
     # Triplet loss
     triplet_criterion = nn.TripletMarginLoss(margin=triplet_margin, p=2, reduction='mean')
@@ -56,27 +56,31 @@ def finetune_encoder_wrapper(args, encoder, train_loader, test_loader=None):
             normal_feats = features_flat[masks_flat == 0]
             anomaly_feats = features_flat[masks_flat == 1]
 
-            if len(normal_feats) < 4 or len(anomaly_feats) < 2:
+            if len(normal_feats) < 10 or len(anomaly_feats) < 4:
                 continue  # skip poorly informative batches
 
             # Normalize
             normal_feats = F.normalize(normal_feats, dim=1)
             anomaly_feats = F.normalize(anomaly_feats, dim=1)
 
-            idx = torch.randperm(len(normal_feats))[:4]
-            anchor = normal_feats[idx[0]].unsqueeze(0)
-            positive = normal_feats[idx[1]].unsqueeze(0)
-            semi_hard_positive = normal_feats[idx[2]].unsqueeze(0)
-            dists = torch.cdist(anchor, anomaly_feats, p=2).squeeze(0)
-            negative = anomaly_feats[torch.argmin(dists)].unsqueeze(0)
+            # Average multiple triplet losses per batch to reduce variance
+            batch_triplets = 8
+            batch_loss = 0.0
+            for _ in range(batch_triplets):
+                idx = torch.randperm(len(normal_feats))[:2]
+                anchor = normal_feats[idx[0]].unsqueeze(0)
+                positive = normal_feats[idx[1]].unsqueeze(0)
+                dists = torch.cdist(anchor, anomaly_feats, p=2).squeeze(0)
+                negative = anomaly_feats[torch.argmin(dists)].unsqueeze(0)
+                batch_loss += triplet_criterion(anchor, positive, negative)
+            batch_loss /= batch_triplets
 
-            loss = triplet_criterion(anchor, positive, negative)
             optimizer.zero_grad()
-            loss.backward()
+            batch_loss.backward()
             torch.nn.utils.clip_grad_norm_(encoder.parameters(), gradient_clip_norm)
             optimizer.step()
 
-            total_loss += loss.item()
+            total_loss += batch_loss.item()
             valid_batches += 1
 
         scheduler.step()
