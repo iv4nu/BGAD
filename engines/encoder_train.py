@@ -21,10 +21,10 @@ class EncoderFineTuner:
         # Parametri di fine-tuning
         self.finetune_epochs = getattr(args, 'finetune_epochs', 10)
         self.finetune_lr = getattr(args, 'finetune_lr', 1e-5)
-        self.triplet_margin_alpha = getattr(args, 'triplet_margin_alpha', 1.5)
-        self.gradient_clip_norm = getattr(args, 'gradient_clip_norm', 1.0)
+        self.triplet_margin_alpha = getattr(args, 'triplet_margin_alpha', 1.0)
+        self.gradient_clip_norm = getattr(args, 'gradient_clip_norm', 0.5)
         self.freeze_early_layers = getattr(args, 'freeze_early_layers', True)
-        self.freeze_ratio = getattr(args, 'freeze_ratio', 0.5)  # Congela il 50% dei primi layer
+        self.freeze_ratio = getattr(args, 'freeze_ratio', 0.7)  # Congela il 50% dei primi layer
         
         # Logging
         self.log_file = os.path.join(args.output_dir, args.exp_name, "encoder_finetune_log.csv")
