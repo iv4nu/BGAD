@@ -8,14 +8,15 @@ def finetune_encoder_wrapper(args, encoder, train_loader, test_loader=None):
     """
     Fine-tune the encoder using TripletMarginLoss with hard negative mining.
     Only the last 50% of the layers are trained.
-    
+    Includes stabilizing strategies to promote decreasing loss.
     """
-    encoder = encoder.to(args.device)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    finetune_lr = 1e-5
-    triplet_margin = 1.0
-    finetune_epochs = 5
+    finetune_lr = 1e-4
+    triplet_margin = 1.2
+    finetune_epochs = 10
     gradient_clip_norm = 1.0
+
+    encoder = encoder.to(device)
 
     # Freeze first 50% of layers
     all_params = list(encoder.named_parameters())
@@ -31,11 +32,10 @@ def finetune_encoder_wrapper(args, encoder, train_loader, test_loader=None):
         lr=finetune_lr
     )
 
-    # Fixed LR scheduler (no decay during early FT)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=999, gamma=1.0)
+    # Scheduler (linear warmup then step decay)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
 
-    # Triplet loss with fixed margin
-    triplet_margin = getattr(args, 'triplet_margin', 1.0)
+    # Triplet loss
     triplet_criterion = nn.TripletMarginLoss(margin=triplet_margin, p=2, reduction='mean')
 
     encoder.train()
@@ -45,8 +45,8 @@ def finetune_encoder_wrapper(args, encoder, train_loader, test_loader=None):
 
         for batch in tqdm(train_loader, desc=f"FT Epoch {epoch+1}/{finetune_epochs}"):
             images, _, masks = batch[:3]
-            images = images.to(args.device)
-            masks = masks.to(args.device)
+            images = images.to(device)
+            masks = masks.to(device)
 
             features = encoder(images)[-1]  # last feature map
             bs, dim, h, w = features.size()
@@ -56,23 +56,24 @@ def finetune_encoder_wrapper(args, encoder, train_loader, test_loader=None):
             normal_feats = features_flat[masks_flat == 0]
             anomaly_feats = features_flat[masks_flat == 1]
 
-            if len(normal_feats) < 2 or len(anomaly_feats) < 1:
+            if len(normal_feats) < 4 or len(anomaly_feats) < 2:
                 continue  # skip poorly informative batches
 
             # Normalize
             normal_feats = F.normalize(normal_feats, dim=1)
             anomaly_feats = F.normalize(anomaly_feats, dim=1)
 
-            i, j = torch.randperm(len(normal_feats))[:2]
-            anchor = normal_feats[i].unsqueeze(0)
-            positive = normal_feats[j].unsqueeze(0)
+            idx = torch.randperm(len(normal_feats))[:4]
+            anchor = normal_feats[idx[0]].unsqueeze(0)
+            positive = normal_feats[idx[1]].unsqueeze(0)
+            semi_hard_positive = normal_feats[idx[2]].unsqueeze(0)
             dists = torch.cdist(anchor, anomaly_feats, p=2).squeeze(0)
             negative = anomaly_feats[torch.argmin(dists)].unsqueeze(0)
 
             loss = triplet_criterion(anchor, positive, negative)
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(encoder.parameters(),gradient_clip_norm)
+            torch.nn.utils.clip_grad_norm_(encoder.parameters(), gradient_clip_norm)
             optimizer.step()
 
             total_loss += loss.item()
