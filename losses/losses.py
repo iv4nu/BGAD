@@ -66,7 +66,7 @@ def get_logp_boundary(logps, mask, pos_beta=0.05, margin_tau=0.1, normalizer=10)
 
     return b_n, b_a
 ''' 
-#Proviamo il pos_beta adattivo
+#UTILIZZIAMO IL POS BETA ADATTIVO
 
 def get_logp_boundary(
     logps,

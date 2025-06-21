@@ -14,13 +14,11 @@ from models import positionalencoding2d, load_flow_model
 from losses import get_logp_boundary, calculate_bg_spp_loss, normal_fl_weighting, abnormal_fl_weighting
 from utils.visualizer import plot_visualizing_results
 from utils.utils import MetricRecorder, calculate_pro_metric, convert_to_anomaly_scores, evaluate_thresholds
-from sklearn.metrics import precision_score, recall_score
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from torchvision.utils import save_image
 import torchvision.transforms.functional as TF
 from PIL import Image
-from engines.monitoring import analyze_neural_activity,extract_sample_features
 from .encoder_train import finetune_encoder_wrapper
 
 log_theta = torch.nn.LogSigmoid()
@@ -32,11 +30,8 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
     adjust_learning_rate(args, optimizer, epoch)
     I = len(data_loader)
     
-    #mod3
-     # CSV log file per triplet loss
-    triplet_log_file = os.path.join(args.output_dir, args.exp_name, "triplet_loss_log.csv")
-    write_triplet_header = not os.path.exists(triplet_log_file)
-#mod3 stop
+    
+
 
     # First epoch only training on normal samples to keep training steadily
     if epoch == 0:
@@ -64,25 +59,7 @@ def train_meta_epoch(args, epoch, data_loader, encoder, decoders, optimizer):
                 mask_ = mask_.reshape(-1)
                 e = e.permute(0, 2, 3, 1).reshape(-1, dim)
 
-                # ---- Triplet Loss Analitica SOLO livello finale ----
-                if l == args.feature_levels - 1:
-                    norm_feats = F.normalize(e[mask_ == 0], dim=1)
-                    anom_feats = F.normalize(e[mask_ == 1], dim=1)
-                    if len(norm_feats) >= 2 and len(anom_feats) >= 1:
-                        perm_n = torch.randperm(len(norm_feats))[:2]
-                        perm_a = torch.randint(0, len(anom_feats), (1,))
-                        anchor = norm_feats[perm_n[0]].unsqueeze(0)
-                        positive = norm_feats[perm_n[1]].unsqueeze(0)
-                        negative = anom_feats[perm_a]
-                        alpha = 1.5
-                        dynamic_margin = alpha * F.pairwise_distance(anchor, positive).mean()
-                        triplet_loss = F.triplet_margin_loss(anchor, positive, negative, margin=dynamic_margin.item(), p=2)
-                        #print(f"[Triplet - Epoch {epoch}] margin: {dynamic_margin.item():.4f}, loss: {triplet_loss.item():.4f}")
-                        with open(triplet_log_file, 'a') as f:
-                            if write_triplet_header:
-                                f.write("epoch,margin,triplet_loss\n")
-                                write_triplet_header = False
-                            f.write(f"{epoch},{dynamic_margin.item():.4f},{triplet_loss.item():.4f}\n")
+                
 
                 # (bs, 128, h, w)
                 pos_embed = positionalencoding2d(args.pos_embed_dim, h, w).to(args.device).unsqueeze(0).repeat(bs, 1, 1, 1)
@@ -246,7 +223,7 @@ def validate(args, epoch, data_loader, encoder, decoders):
     scores = convert_to_anomaly_scores(args, logps_list)
     # calculate detection AUROC
     img_scores = np.max(scores, axis=(1, 2))
-    #AGGIUNTO PER TEST CON UAD!!!!!!!
+
     np.save(os.path.join(args.output_dir, args.exp_name, "img_scores.npy"), img_scores)
 
     gt_label = np.asarray(gt_label_list, dtype=bool)
@@ -271,19 +248,11 @@ def validate(args, epoch, data_loader, encoder, decoders):
         plot_visualizing_results(image_list, scores, img_scores, gt_mask_list, pix_threshold, 
                                img_threshold, save_dir, file_names, img_types)
 
-    # --- Calcolo Precision e Recall pixel-level ---
     bin_scores = (scores > 0.5).astype(np.uint8)  # threshold grezza per predizione binaria
     gt_mask_flat = gt_mask.flatten()
     bin_scores_flat = bin_scores.flatten()
 
-    pix_precision = precision_score(gt_mask_flat, bin_scores_flat, zero_division=0)
-    pix_recall = recall_score(gt_mask_flat, bin_scores_flat, zero_division=0)
-    # Precision e Recall pixel-level
-    TP = np.sum((gt_mask_flat == 1) & (bin_scores_flat == 1))
-    FP = np.sum((gt_mask_flat == 0) & (bin_scores_flat == 1))
-    FN = np.sum((gt_mask_flat == 1) & (bin_scores_flat == 0))
-    precision = TP / (TP + FP + 1e-8)
-    recall = TP / (TP + FN + 1e-8)
+    
 
     # --- Salvataggio su CSV ---
     # Percorso completo del file CSV
@@ -303,13 +272,13 @@ def validate(args, epoch, data_loader, encoder, decoders):
     with open(csv_path, mode='a', newline='') as file:
         writer = csv.writer(file)
         if not file_exists:
-            writer.writerow(["Epoch", "Loss", "Precision", "Recall", "IMG_AUROC", "PIX_AUROC"])
-        writer.writerow([epoch, round(mean_loss, 4), round(precision, 4), round(recall, 4),
+            writer.writerow(["Epoch", "Loss", "IMG_AUROC", "PIX_AUROC"])
+        writer.writerow([epoch, round(mean_loss, 4),
                         round(img_auc * 100, 2), round(pix_auc * 100, 2)])
     with open(csv_file, 'a') as f:
         if write_header:
-            f.write("epoch,loss,img_auc,pix_auc,precision,recall\n")
-        f.write(f"{epoch},{mean_loss:.4f},{img_auc:.4f},{pix_auc:.4f},{pix_precision:.4f},{pix_recall:.4f}\n")
+            f.write("epoch,loss,img_auc,pix_auc\n")
+        f.write(f"{epoch},{mean_loss:.4f},{img_auc:.4f},{pix_auc:.4f}\n")
 
     return img_auc, pix_auc, pix_pro
 
@@ -319,19 +288,17 @@ def train(args):
     encoder = timm.create_model(args.backbone_arch, features_only=True, 
                 out_indices=[i+1 for i in range(args.feature_levels)], pretrained=True)
     
-    #blocco precedente { 
-    encoder = encoder.to(args.device).eval()
-    feat_dims = encoder.feature_info.channels()
-#}
-    #blocco aggiornato { 
-      # data loaders (li creiamo prima per il fine-tuning)
-    #normal_loader, train_loader, test_loader = create_fas_data_loader(args) 
-    
-    # 🆕 FINE-TUNING DELL'ENCODER CON TRIPLET LOSS
-    #encoder = finetune_encoder_wrapper(args, encoder, train_loader, test_loader)
-    
-    # Ora l'encoder è già in modalità eval e fine-tuned
+    #blocco precedente SENZA FINE TUNING ENCODER{ 
+    #encoder = encoder.to(args.device).eval()
     #feat_dims = encoder.feature_info.channels()
+#}
+    #blocco aggiornato PER FINE TUNING { 
+    
+    normal_loader, train_loader, test_loader = create_fas_data_loader(args) 
+    
+    # FINE-TUNING DELL'ENCODER CON TRIPLET LOSS
+    encoder = finetune_encoder_wrapper(args, encoder, train_loader, test_loader)
+    feat_dims = encoder.feature_info.channels()
     
     #}'''
     
@@ -398,7 +365,6 @@ def train(args):
         # === Validazione finale su test set ===
     
     print("\n[Post-Training Evaluation] Eseguo validazione finale sul test set...")
-    #solo il test loader che già lo restituisce create_fas_data_loader
     encoder.eval()
     decoders = [decoder.eval() for decoder in decoders]
 

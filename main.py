@@ -1,72 +1,51 @@
-import os
-import numpy as np
 import torch
-import warnings
-from config import parse_args
-from datasets import MVTEC_CLASS_NAMES, BTAD_CLASS_NAMES
-from utils.utils import init_seeds, setting_lr_parameters
+import torch.nn as nn
+import os
+import FrEIA.framework as Ff
+import FrEIA.modules as Fm
+from main import parse_args
+from engines.bgad_fas_train_engine import train
+#from engines.bgad_train_engine import train
+from datasets import create_fas_data_loader,create_data_loader
 
 
-def main_single(args):
-    # model path
-    args.model_path = "{}_{}_{}_{}".format(
-        args.dataset, args.backbone_arch, args.flow_arch, args.class_name)
-    
-    # image
-    args.img_size = (args.inp_size, args.inp_size)  
-    args.crop_size = (args.inp_size, args.inp_size)  
-    args.norm_mean, args.norm_std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
-    
-    args.img_dims = [3] + list(args.img_size)
-
-    # output settings
-    args.save_results = True
-    args.save_aupro = False
-    # unsup-train lr settings
-    setting_lr_parameters(args)
-    
-    # selecting train functions
-    if args.with_fas:
-        from engines.bgad_fas_train_engine2 import train
-        img_auc, pix_auc, pix_pro = train(args)
-    else:
-        from engines.bgad_train_engine import train
-        img_auc, pix_auc, pix_pro = train(args)
-
-    return img_auc, pix_auc, pix_pro
 
 
 def main():
-    init_seeds(0)
     args = parse_args()
+    
 
-    # setting cuda 
-    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-    args.device = torch.device("cuda")
 
-    img_aucs, pix_aucs, pix_pros = [], [], []
-    args
-    if args.class_name == 'none':  # default training all classes
-        if args.dataset == 'mvtec':
-            CLASS_NAMES = MVTEC_CLASS_NAMES 
-        elif args.dataset == 'btad':
-            CLASS_NAMES = BTAD_CLASS_NAMES 
-    else:
-        CLASS_NAMES = [args.class_name]
-    for class_name in CLASS_NAMES:
-        args.class_name = class_name
-        img_auc, pix_auc, pix_pro = main_single(args)
-        img_aucs.append(img_auc)
-        pix_aucs.append(pix_auc)
-        pix_pros.append(pix_pro)
-    for i, class_name in enumerate(CLASS_NAMES):
-        print(f'{class_name}: Image-AUC: {img_aucs[i]}, Pixel-AUC: {pix_aucs[i]}, Pixel-PRO: {pix_pros[i]}')
-    print('Mean Image-AUC: {}'.format(np.mean(img_aucs)))
-    print('Mean Pixel-AUC: {}'.format(np.mean(pix_aucs)))
-    print('Mean Pixel-PRO: {}'.format(np.mean(pix_pros)))
+    # Override parametri
+    args.class_name = 'capsule'
+    args.flow_arch = 'conditional_flow_model'
+    args.margin_tau = 0.1
+    args.pos_beta = 0.05
+    args.data_strategy = '0,1'
+    args.num_anomalies = 5
+
+    
+    args.crop_size = (args.inp_size, args.inp_size)
+    args.img_size = (args.inp_size, args.inp_size)
+    args.norm_mean = [0.485, 0.456, 0.406]
+    args.norm_std = [0.229, 0.224, 0.225]
+    args.save_results = True
+    args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Warmup defaults
+    args.lr_warmup_from = 0.0
+    args.lr_warmup_to = args.lr
+
+    # Early stopping config
+    patience = 5
+    best_score = -1
+    best_epoch = 0
+    stop_counter = 0
+
+   # normal_loader, train_loader, test_loader = create_fas_data_loader(args)
+
+    img_auc, pix_auc, _ = train(args)
 
 
 if __name__ == '__main__':
-    warnings.filterwarnings('ignore')
     main()
-

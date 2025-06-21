@@ -6,16 +6,13 @@ import FrEIA.modules as Fm
 
 
 
-
-def subnet_fc(dims_in, dims_out, layer_id=None, args=None):
-    layers = nn.Sequential(
-                nn.Linear(dims_in, 256),
-                nn.LeakyReLU(),
-                nn.Linear(256, 256),
-                nn.LeakyReLU(),
-                nn.Linear(256, dims_out)
-            )
-    return layers
+#SUBNET SEMPLIFICATA
+def subnet_fc(dims_in, dims_out):
+    return nn.Sequential(
+        nn.ReLU(),
+        nn.Linear(dims_in, dims_out),
+    )
+    
 
 def flow_model(args, in_channels):
     coder = Ff.SequenceINN(in_channels)
